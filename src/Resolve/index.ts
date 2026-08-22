@@ -74,40 +74,12 @@ export class Resolve<T> {
    */
   get<P extends Path<T>>(
     path: P
-  ): Resolve<ValueAtPath<T, P>>;
-
-  /**
-   * Filters collection items using a property matcher expression.
-   *
-   * @param matcher A path matcher expression (e.g. "role:admin").
-   *
-   * @example
-   * ```ts
-   * resolve(data).get("role:admin").values();
-   * ```
-   */
-  get(
-    matcher: Matcher<T>
-  ): Resolve<T>;
-
-  get(
-    pathOrMatcher: string
-  ): Resolve<any> {
-    if (pathOrMatcher.includes(":")) {
-      return new Resolve(this.source, [
-        ...this.operations,
-        {
-          type: "where",
-          value: pathOrMatcher,
-        },
-      ]);
-    }
-
-    return new Resolve(this.source as any, [
+  ): Resolve<ValueAtPath<T, P>> {
+    return new Resolve(this.source as unknown as ValueAtPath<T, P>, [
       ...this.operations,
       {
         type: "path",
-        value: pathOrMatcher,
+        value: path,
       },
     ]);
   }
@@ -127,8 +99,7 @@ export class Resolve<T> {
    * resolve(data).get("teams").where("lead.role:admin").values();
    * ```
    */
-  where(matcher: Matcher<T>): Resolve<T>;
-  where(matcher: string): Resolve<any> {
+  where(matcher: Matcher<T>): Resolve<T> {
     return new Resolve(this.source, [
       ...this.operations,
       {

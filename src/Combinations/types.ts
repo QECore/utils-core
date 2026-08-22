@@ -7,7 +7,7 @@ export type CombinationValue =
   | null
   | undefined;
 
-export type CombinationInput = Record<string, unknown>;
+export type CombinationInput = object;
 
 export interface CombinationMetadata {
   tags: string[];
@@ -56,7 +56,7 @@ export interface CombinationsFunction {
   /**
    * Combines multiple combination case arrays into a single flattened array.
    */
-  combine<T extends readonly (readonly CombinationCase<unknown>[])[]>(
+  combine<T extends readonly (readonly CombinationCase<object>[])[]>(
     ...lists: T
   ): T[number][number][];
 }

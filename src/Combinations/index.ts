@@ -163,7 +163,7 @@ function generateObjectCases<T extends CombinationInput>(
   const nameSeparator =
     options.nameSeparator ?? DEFAULT_NAME_SEPARATOR;
 
-  const resolved = resolveObject(input) as T[];
+  const resolved = resolveObject(input as PlainObject) as T[];
 
   return resolved.map((data) =>
     createCase(
@@ -201,7 +201,7 @@ function generateArrayCases<T extends CombinationInput>(
     options.nameSeparator ?? DEFAULT_NAME_SEPARATOR;
 
   const resolvedElements = input.map((item) =>
-    resolveObject(item)
+    resolveObject(item as PlainObject)
   );
 
   let payloads: PlainObject[][] = [[]];
@@ -237,9 +237,9 @@ function generateArrayCases<T extends CombinationInput>(
  * ```
  */
 export function combine<
-  T extends readonly (readonly CombinationCase<unknown>[])[],
+  T extends readonly (readonly CombinationCase<object>[])[],
 >(...lists: T): T[number][number][] {
-  return (lists as unknown as unknown[][]).flat() as T[number][number][];
+  return lists.flat() as unknown as T[number][number][];
 }
 
 /**

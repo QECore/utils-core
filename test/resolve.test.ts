@@ -140,7 +140,7 @@ describe("resolve", () => {
       ],
     };
 
-    it("filters using where() and get('key:value')", () => {
+    it("filters using where() with case-insensitive substring matching", () => {
       const adminsFromWhere = resolve(dataset)
         .get("users")
         .where("role:admin")
@@ -148,11 +148,25 @@ describe("resolve", () => {
       expect(adminsFromWhere).toHaveLength(2);
       expect(adminsFromWhere.map((u) => u.name)).toEqual(["Alice", "Charlie"]);
 
-      const adminsFromGet = resolve(dataset)
+      // Case-insensitive matching: "ADMIN", "admin", "superadmin"
+      const adminsUpper = resolve(dataset)
         .get("users")
-        .get("role:admin")
+        .where("role:ADMIN")
         .values();
-      expect(adminsFromGet).toEqual(adminsFromWhere);
+      expect(adminsUpper).toEqual(adminsFromWhere);
+
+      const superadminsData = {
+        users: [
+          { name: "Root", role: "superadministrator" },
+          { name: "Member", role: "member" },
+        ],
+      };
+      const superadmins = resolve(superadminsData)
+        .get("users")
+        .where("role:admin")
+        .values();
+      expect(superadmins).toHaveLength(1);
+      expect(superadmins[0]?.name).toBe("Root");
     });
 
     it("filters with equals and notEquals", () => {

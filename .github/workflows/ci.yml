@@ -4,15 +4,13 @@ on:
   push:
     branches:
       - main
-      - "feature/**"
-      - "fix/**"
   pull_request:
     branches:
       - main
 
 jobs:
   validate:
-    name: Validate (${{ matrix.node-version }})
+    name: Validate (Node ${{ matrix.node-version }})
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -40,5 +38,14 @@ jobs:
       - name: Build package
         run: npm run build
 
-      - name: Verify package tarball
-        run: npm pack --dry-run
+      - name: Verify package tarball and consumer installation
+        run: |
+          TARBALL=$(npm pack)
+          mkdir -p .smoke-consumer
+          cd .smoke-consumer
+          npm init -y
+          npm install ../$TARBALL
+          node -e "const { resolve, combinations, combine } = require('utils-core'); console.log('CJS smoke test passed:', typeof resolve, typeof combinations, typeof combine);"
+          node --input-type=module -e "import { resolve, combinations, combine } from 'utils-core'; console.log('ESM smoke test passed:', typeof resolve, typeof combinations, typeof combine);"
+          cd ..
+          rm -rf .smoke-consumer $TARBALL

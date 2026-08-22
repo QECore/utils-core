@@ -195,13 +195,76 @@ describe("Type Inference and Compile-time Checks", () => {
 
     // @ts-expect-error invalid deep array member path
     resolve(data).get("teams.members.invalid");
+
+    // @ts-expect-error matcher expression cannot be passed to get()
+    resolve(data).get("role:admin");
   });
 
-  it("infers types for combinations and combine", () => {
-    const browsers = combinations({ browser: ["chromium", "firefox"] });
-    const envs = combinations({ env: ["local", "ci"] });
+  it("enforces strong type safety for where() matcher paths", () => {
+    interface Lead {
+      role: string;
+      level: number;
+    }
+    interface Dept {
+      deptName: string;
+      lead: Lead;
+    }
+    const org = {
+      depts: [
+        { deptName: "Platform", lead: { role: "admin", level: 5 } },
+      ] as Dept[],
+    };
 
-    const combined = combine(browsers, envs);
+    // Valid where matchers
+    resolve(org).get("depts").where("deptName:Platform");
+    resolve(org).get("depts").where("lead.role:admin");
+    resolve(org).get("depts").where("lead.level:5");
+
+    // Invalid where matchers
+    // @ts-expect-error invalid top-level matcher path
+    resolve(org).get("depts").where("invalid:value");
+
+    // @ts-expect-error invalid nested matcher path
+    resolve(org).get("depts").where("lead.invalid:value");
+  });
+
+  it("verifies terminal value() index and values() type signatures", () => {
+    const data: RootData = {
+      teams: [
+        {
+          teamName: "Core",
+          members: [{ id: 1, name: "John", roles: ["admin"], active: true }],
+        },
+      ],
+      company: { location: "SF", founded: 2020 },
+    };
+
+    const resolver = resolve(data).get("teams");
+
+    expectTypeOf(resolver.value()).toEqualTypeOf<Team | undefined>();
+    expectTypeOf(resolver.value(0)).toEqualTypeOf<Team | undefined>();
+    expectTypeOf(resolver.value(1)).toEqualTypeOf<Team | undefined>();
+    expectTypeOf(resolver.first()).toEqualTypeOf<Team | undefined>();
+    expectTypeOf(resolver.last()).toEqualTypeOf<Team | undefined>();
+    expectTypeOf(resolver.values()).toEqualTypeOf<Team[]>();
+  });
+
+  it("infers types for combinations and combine with standard interfaces", () => {
+    interface BrowserConfig {
+      browser: string[];
+      version: number[];
+    }
+
+    const config: BrowserConfig = {
+      browser: ["chrome", "firefox"],
+      version: [120, 121],
+    };
+
+    const cases = combinations(config);
+    expectTypeOf(cases).toBeArray();
+
+    const envs = combinations({ env: ["local", "ci"] });
+    const combined = combine(cases, envs);
     expectTypeOf(combined).toBeArray();
   });
 });
