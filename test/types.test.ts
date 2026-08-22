@@ -279,6 +279,13 @@ describe("Type Inference and Compile-time Checks", () => {
       | (typeof envCases)[number]
     >();
 
+    // combine must reject non-CombinationCase arrays at compile time
+    // @ts-expect-error non-CombinationCase array passed to combine()
+    combine([1, 2, 3]);
+
+    // @ts-expect-error non-CombinationCase array passed to combinations.combine()
+    combinations.combine([{ notACase: true }]);
+
     // TEST 4: combinations.combine produces identical type inference
     const combinedViaMethod = combinations.combine(browserCases, envCases);
     expectTypeOf(combinedViaMethod).toEqualTypeOf<typeof combined>();

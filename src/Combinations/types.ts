@@ -167,6 +167,7 @@ export interface CombinationsFunction {
 
   /**
    * Combines independent combination outputs into one array without Cartesian multiplication.
+   * Accepts only combination case lists.
    *
    * @param lists Combination case lists to concatenate.
    *
@@ -179,6 +180,6 @@ export interface CombinationsFunction {
    * ```
    */
   combine<
-    const Lists extends readonly (readonly unknown[])[],
+    const Lists extends readonly (readonly CombinationCase<unknown>[])[],
   >(...lists: Lists): CombinationListItem<Lists[number]>[];
 }
