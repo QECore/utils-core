@@ -1,5 +1,10 @@
 /**
  * Primitive scalar value types.
+ *
+ * @example
+ * ```ts
+ * const val: Primitive = "hello";
+ * ```
  */
 export type Primitive =
   | string
@@ -12,17 +17,35 @@ export type Primitive =
 
 /**
  * Extracts string keys from an object type.
+ *
+ * @example
+ * ```ts
+ * type Keys = StringKey<{ name: string; age: number }>;
+ * // "name" | "age"
+ * ```
  */
 export type StringKey<T> = Extract<keyof T, string>;
 
 /**
  * Extracts the item type from an array, or `never` if not an array.
+ *
+ * @example
+ * ```ts
+ * type Item = ArrayItem<string[]>;
+ * // string
+ * ```
  */
 export type ArrayItem<T> =
   T extends readonly (infer U)[] ? U : never;
 
 /**
  * Resolves the underlying element type if `T` is an array, or returns `T` directly.
+ *
+ * @example
+ * ```ts
+ * type A = ResolvedItem<string[]>; // string
+ * type B = ResolvedItem<number>;   // number
+ * ```
  */
 export type ResolvedItem<T> =
   T extends readonly (infer U)[] ? U : T;
@@ -43,12 +66,16 @@ export type SumResult<T> =
     ? number
     : ResolvedItem<T> extends string
       ? string
-      : ResolvedItem<T> extends number | string
-        ? number | string
-        : never;
+      : never;
 
 /**
  * Target type for `contains()` filtering: substring needle for strings, or exact element value for arrays.
+ *
+ * @example
+ * ```ts
+ * type StrTarget = ContainsTarget<string>;   // string
+ * type ArrTarget = ContainsTarget<number[]>; // number
+ * ```
  */
 export type ContainsTarget<T> =
   T extends readonly (infer U)[]
@@ -172,6 +199,12 @@ export type ValueAtPath<
 
 /**
  * Values supporting relative order comparison (e.g. `greaterThan`, `lessThan`).
+ *
+ * @example
+ * ```ts
+ * const date: Comparable = new Date("2025-01-01");
+ * const num: Comparable = 42;
+ * ```
  */
 export type Comparable =
   | string

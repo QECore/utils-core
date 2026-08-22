@@ -97,6 +97,7 @@ export class Resolve<T> {
    * @example
    * ```ts
    * resolve(data).get("teams").where("lead.role:admin").values();
+   * // [{ name: "Platform", lead: { role: "admin" } }]
    * ```
    */
   where(matcher: Matcher<T>): Resolve<T> {
@@ -240,6 +241,7 @@ export class Resolve<T> {
    * @example
    * ```ts
    * resolve(users).get("age").equals(30);
+   * // [30]
    * ```
    */
   equals(expected: ResolvedItem<T>): ResolvedItem<T>[] {
@@ -259,6 +261,7 @@ export class Resolve<T> {
    * @example
    * ```ts
    * resolve(users).get("age").notEquals(30);
+   * // [22, 40]
    * ```
    */
   notEquals(expected: ResolvedItem<T>): ResolvedItem<T>[] {

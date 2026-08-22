@@ -1,5 +1,10 @@
 /**
  * Primitive and scalar value types supported in combinations.
+ *
+ * @example
+ * ```ts
+ * const val: CombinationValue = "chromium";
+ * ```
  */
 export type CombinationValue =
   | string
@@ -136,6 +141,6 @@ export interface CombinationsFunction {
    * ```
    */
   combine<
-    const Lists extends readonly (readonly CombinationCase<unknown>[])[],
-  >(...lists: Lists): Lists[number][number][];
+    T extends readonly (readonly CombinationCase<any>[])[],
+  >(...lists: T): T[number][number][];
 }

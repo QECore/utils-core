@@ -241,9 +241,9 @@ function generateArrayCases<T extends object>(
  * ```
  */
 export function combine<
-  const Lists extends readonly (readonly CombinationCase<unknown>[])[],
->(...lists: Lists): Lists[number][number][] {
-  const result: Lists[number][number][] = [];
+  T extends readonly (readonly CombinationCase<any>[])[],
+>(...lists: T): T[number][number][] {
+  const result: T[number][number][] = [];
   for (const list of lists) {
     for (const item of list) {
       result.push(item);
