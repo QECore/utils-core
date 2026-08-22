@@ -20,7 +20,9 @@ export type SumResult<T> =
     ? number
     : ResolvedItem<T> extends string
       ? string
-      : number | string;
+      : ResolvedItem<T> extends number | string
+        ? number | string
+        : never;
 
 export type ContainsTarget<T> =
   T extends readonly (infer U)[]

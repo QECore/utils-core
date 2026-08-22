@@ -176,13 +176,18 @@ function generateObjectCases<T extends CombinationInput>(
 }
 
 /**
- * Generates combinations for an array payload.
+ * Generates Cartesian combinations where the payload itself is an array of objects.
  *
- * Example:
- * combinations.asArray([
+ * @param input Array of combination objects.
+ * @param options Optional configuration (e.g. nameSeparator).
+ *
+ * @example
+ * ```ts
+ * const cases = combinations.asArray([
  *   { browser: ["chromium", "firefox"] },
  *   { env: ["local", "ci"] }
- * ])
+ * ]);
+ * ```
  */
 function generateArrayCases<T extends CombinationInput>(
   input: T[],
@@ -218,7 +223,18 @@ function generateArrayCases<T extends CombinationInput>(
 }
 
 /**
- * Concatenates multiple combination result arrays into a single collection.
+ * Concatenates multiple combination result arrays into a single collection
+ * without re-multiplying them as a Cartesian product.
+ *
+ * @param lists Combination case lists to combine.
+ *
+ * @example
+ * ```ts
+ * const browsers = combinations({ browser: ["chromium", "firefox"] });
+ * const envs = combinations({ env: ["local", "ci"] });
+ * const allCases = combine(browsers, envs);
+ * // Total 4 test cases
+ * ```
  */
 export function combine<
   T extends readonly (readonly CombinationCase<unknown>[])[],
@@ -227,7 +243,19 @@ export function combine<
 }
 
 /**
- * Primary combinations function.
+ * Generates Cartesian product test cases with deterministic naming and metadata tags.
+ *
+ * @param input An object with option arrays or an array of option objects.
+ * @param options Configuration options (such as custom `nameSeparator`).
+ *
+ * @example
+ * ```ts
+ * const cases = combinations({
+ *   browser: ["chromium", "firefox"],
+ *   env: ["local", "ci"]
+ * });
+ * // Produces 4 test cases with name and @tags
+ * ```
  */
 export const combinations = Object.assign(
   function combinations<T extends CombinationInput>(

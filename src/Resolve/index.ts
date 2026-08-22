@@ -43,6 +43,16 @@ export class Resolve<T> {
    * FACTORY
    * ======================================================== */
 
+  /**
+   * Creates a new Resolve instance for querying and transforming data.
+   *
+   * @param source The input data structure to resolve.
+   *
+   * @example
+   * ```ts
+   * const resolver = Resolve.from({ users: [{ name: "Alice" }] });
+   * ```
+   */
   static from<T>(source: T): Resolve<T> {
     return new Resolve(source);
   }
@@ -51,10 +61,31 @@ export class Resolve<T> {
    * GET
    * ======================================================== */
 
+  /**
+   * Traverses a property or nested path with compile-time type safety.
+   *
+   * @param path A valid dot-notated or indexed property path.
+   *
+   * @example
+   * ```ts
+   * resolve(data).get("teams.members.name").values();
+   * // ["Alice", "Bob"]
+   * ```
+   */
   get<P extends Path<T>>(
     path: P
   ): Resolve<ValueAtPath<T, P>>;
 
+  /**
+   * Filters collection items using a property matcher expression.
+   *
+   * @param matcher A path matcher expression (e.g. "role:admin").
+   *
+   * @example
+   * ```ts
+   * resolve(data).get("role:admin").values();
+   * ```
+   */
   get(
     matcher: Matcher<T>
   ): Resolve<T>;
@@ -85,6 +116,17 @@ export class Resolve<T> {
    * WHERE
    * ======================================================== */
 
+  /**
+   * Filters resolved collection items using a path matcher expression.
+   * Evaluates the path on each collection item and performs case-insensitive substring matching.
+   *
+   * @param matcher Path matcher formatted as `"path:expected"` (e.g. `"role:admin"` or `"lead.role:admin"`).
+   *
+   * @example
+   * ```ts
+   * resolve(data).get("teams").where("lead.role:admin").values();
+   * ```
+   */
   where(matcher: Matcher<T>): Resolve<T>;
   where(matcher: string): Resolve<any> {
     return new Resolve(this.source, [
@@ -100,6 +142,17 @@ export class Resolve<T> {
    * AT
    * ======================================================== */
 
+  /**
+   * Adds an index-selection stage to the resolver pipeline.
+   *
+   * @param index 0-based index to select from the current pipeline collection.
+   *
+   * @example
+   * ```ts
+   * resolve(users).at(0).get("name").value();
+   * // "Alice"
+   * ```
+   */
   at(
     index: number
   ): Resolve<ArrayItem<T> extends never ? T : ArrayItem<T>> {
@@ -116,10 +169,34 @@ export class Resolve<T> {
    * TERMINAL METHODS
    * ======================================================== */
 
+  /**
+   * Executes the pipeline and returns all resolved values as an array.
+   *
+   * @example
+   * ```ts
+   * resolve([10, 20, 30]).values();
+   * // [10, 20, 30]
+   * ```
+   */
   values(): ResolvedItem<T>[] {
     return this.execute() as ResolvedItem<T>[];
   }
 
+  /**
+   * Executes the pipeline and returns the resolved value at the specified index.
+   * Defaults to index 0 (the first resolved value).
+   *
+   * @param index 0-based index of the resolved item (defaults to 0).
+   *
+   * @example
+   * ```ts
+   * resolve([10, 20, 30]).value();
+   * // 10
+   *
+   * resolve([10, 20, 30]).value(1);
+   * // 20
+   * ```
+   */
   value(index = 0): ResolvedItem<T> | undefined {
     const results = this.execute();
     if (index >= 0 && index < results.length) {
@@ -128,10 +205,28 @@ export class Resolve<T> {
     return undefined;
   }
 
+  /**
+   * Returns the first resolved value.
+   *
+   * @example
+   * ```ts
+   * resolve([10, 20, 30]).first();
+   * // 10
+   * ```
+   */
   first(): ResolvedItem<T> | undefined {
     return this.value(0);
   }
 
+  /**
+   * Returns the last resolved value.
+   *
+   * @example
+   * ```ts
+   * resolve([10, 20, 30]).last();
+   * // 30
+   * ```
+   */
   last(): ResolvedItem<T> | undefined {
     const results = this.execute();
     return results.length > 0
@@ -139,14 +234,43 @@ export class Resolve<T> {
       : undefined;
   }
 
+  /**
+   * Returns the total count of resolved items.
+   *
+   * @example
+   * ```ts
+   * resolve([10, 20, 30]).count();
+   * // 3
+   * ```
+   */
   count(): number {
     return this.execute().length;
   }
 
+  /**
+   * Returns true if at least one value was resolved.
+   *
+   * @example
+   * ```ts
+   * resolve([10]).exists();
+   * // true
+   * ```
+   */
   exists(): boolean {
     return this.execute().length > 0;
   }
 
+  /**
+   * Filters items strictly equal to the expected value.
+   * Date comparisons evaluate timestamp equality.
+   *
+   * @param expected Target value compatible with the resolved type.
+   *
+   * @example
+   * ```ts
+   * resolve(users).get("age").equals(30);
+   * ```
+   */
   equals(expected: ResolvedItem<T>): ResolvedItem<T>[] {
     return this.execute().filter((value) => {
       if (value instanceof Date && expected instanceof Date) {
@@ -156,6 +280,16 @@ export class Resolve<T> {
     }) as ResolvedItem<T>[];
   }
 
+  /**
+   * Filters items not equal to the expected value.
+   *
+   * @param expected Target value compatible with the resolved type.
+   *
+   * @example
+   * ```ts
+   * resolve(users).get("age").notEquals(30);
+   * ```
+   */
   notEquals(expected: ResolvedItem<T>): ResolvedItem<T>[] {
     return this.execute().filter((value) => {
       if (value instanceof Date && expected instanceof Date) {
@@ -165,6 +299,19 @@ export class Resolve<T> {
     }) as ResolvedItem<T>[];
   }
 
+  /**
+   * Filters items containing the target:
+   * - For strings: case-insensitive substring search.
+   * - For arrays: exact element membership (no string coercion).
+   *
+   * @param expected Substring needle for strings, or exact element value for arrays.
+   *
+   * @example
+   * ```ts
+   * resolve("hello world").contains("world"); // ["hello world"]
+   * resolve(["admin", "user"]).contains("admin"); // ["admin"]
+   * ```
+   */
   contains(expected: ContainsTarget<T>): ResolvedItem<T>[] {
     const isExpectedString = typeof expected === "string";
     const needle = isExpectedString
@@ -192,18 +339,51 @@ export class Resolve<T> {
     }) as ResolvedItem<T>[];
   }
 
+  /**
+   * Filters string values starting with the specified prefix.
+   *
+   * @param expected Prefix string.
+   *
+   * @example
+   * ```ts
+   * resolve(["apple", "banana"]).startsWith("app");
+   * // ["apple"]
+   * ```
+   */
   startsWith(expected: string): ResolvedItem<T>[] {
     return this.execute().filter(
       (value) => typeof value === "string" && value.startsWith(expected)
     ) as ResolvedItem<T>[];
   }
 
+  /**
+   * Filters string values ending with the specified suffix.
+   *
+   * @param expected Suffix string.
+   *
+   * @example
+   * ```ts
+   * resolve(["apple", "banana"]).endsWith("le");
+   * // ["apple"]
+   * ```
+   */
   endsWith(expected: string): ResolvedItem<T>[] {
     return this.execute().filter(
       (value) => typeof value === "string" && value.endsWith(expected)
     ) as ResolvedItem<T>[];
   }
 
+  /**
+   * Filters values strictly greater than the expected value.
+   *
+   * @param expected Comparable boundary (number, string, bigint, or Date).
+   *
+   * @example
+   * ```ts
+   * resolve([10, 20, 30]).greaterThan(15);
+   * // [20, 30]
+   * ```
+   */
   greaterThan(expected: Comparable): ResolvedItem<T>[] {
     return this.execute().filter((value) => {
       const diff = Resolve.compare(value, expected);
@@ -211,6 +391,17 @@ export class Resolve<T> {
     }) as ResolvedItem<T>[];
   }
 
+  /**
+   * Filters values greater than or equal to the expected value.
+   *
+   * @param expected Comparable boundary.
+   *
+   * @example
+   * ```ts
+   * resolve([10, 20, 30]).greaterThanOrEqual(20);
+   * // [20, 30]
+   * ```
+   */
   greaterThanOrEqual(expected: Comparable): ResolvedItem<T>[] {
     return this.execute().filter((value) => {
       const diff = Resolve.compare(value, expected);
@@ -218,6 +409,17 @@ export class Resolve<T> {
     }) as ResolvedItem<T>[];
   }
 
+  /**
+   * Filters values strictly less than the expected value.
+   *
+   * @param expected Comparable boundary.
+   *
+   * @example
+   * ```ts
+   * resolve([10, 20, 30]).lessThan(25);
+   * // [10, 20]
+   * ```
+   */
   lessThan(expected: Comparable): ResolvedItem<T>[] {
     return this.execute().filter((value) => {
       const diff = Resolve.compare(value, expected);
@@ -225,6 +427,17 @@ export class Resolve<T> {
     }) as ResolvedItem<T>[];
   }
 
+  /**
+   * Filters values less than or equal to the expected value.
+   *
+   * @param expected Comparable boundary.
+   *
+   * @example
+   * ```ts
+   * resolve([10, 20, 30]).lessThanOrEqual(20);
+   * // [10, 20]
+   * ```
+   */
   lessThanOrEqual(expected: Comparable): ResolvedItem<T>[] {
     return this.execute().filter((value) => {
       const diff = Resolve.compare(value, expected);
@@ -232,28 +445,76 @@ export class Resolve<T> {
     }) as ResolvedItem<T>[];
   }
 
+  /**
+   * Filters values that are strictly null.
+   *
+   * @example
+   * ```ts
+   * resolve([null, 1, 2]).isNull();
+   * // [null]
+   * ```
+   */
   isNull(): ResolvedItem<T>[] {
     return this.execute().filter(
       (value) => value === null
     ) as ResolvedItem<T>[];
   }
 
+  /**
+   * Filters values that are strictly undefined.
+   *
+   * @example
+   * ```ts
+   * resolve([undefined, 1, 2]).isUndefined();
+   * // [undefined]
+   * ```
+   */
   isUndefined(): ResolvedItem<T>[] {
     return this.execute().filter(
       (value) => value === undefined
     ) as ResolvedItem<T>[];
   }
 
+  /**
+   * Filters truthy values.
+   *
+   * @example
+   * ```ts
+   * resolve([0, 1, false, "text"]).isTruthy();
+   * // [1, "text"]
+   * ```
+   */
   isTruthy(): ResolvedItem<T>[] {
     return this.execute().filter((value) =>
       Boolean(value)
     ) as ResolvedItem<T>[];
   }
 
+  /**
+   * Filters falsy values.
+   *
+   * @example
+   * ```ts
+   * resolve([0, 1, false, "text"]).isFalsy();
+   * // [0, false]
+   * ```
+   */
   isFalsy(): ResolvedItem<T>[] {
     return this.execute().filter((value) => !value) as ResolvedItem<T>[];
   }
 
+  /**
+   * Filters strings matching the provided regular expression.
+   * Cleans global/sticky flags to prevent stateful RegExp index bugs.
+   *
+   * @param regex Target regular expression pattern.
+   *
+   * @example
+   * ```ts
+   * resolve(["Alice", "Bob"]).matches(/^A/);
+   * // ["Alice"]
+   * ```
+   */
   matches(regex: RegExp): ResolvedItem<T>[] {
     const cleanRegex =
       regex.global || regex.sticky
@@ -265,6 +526,19 @@ export class Resolve<T> {
     ) as ResolvedItem<T>[];
   }
 
+  /**
+   * Aggregates homogeneous number arrays into a sum, or concatenates string arrays.
+   * Returns 0 for empty collections. Throws a TypeError on mixed or unsupported types.
+   *
+   * @throws {TypeError} When elements contain mixed or non-numeric/non-string types.
+   *
+   * @example
+   * ```ts
+   * resolve([1, 2, 3]).sum(); // 6
+   * resolve(["a", "b"]).sum(); // "ab"
+   * resolve([]).sum(); // 0
+   * ```
+   */
   sum(): SumResult<T> {
     const values = this.execute();
 
@@ -360,7 +634,7 @@ export class Resolve<T> {
       if (segment.type === "property") {
         current = this.readProperty(current, segment.key);
       } else {
-        current = this.applyIndex(current, segment.index);
+        current = this.readIndex(current, segment.index);
       }
 
       if (current.length === 0) {
@@ -438,14 +712,33 @@ export class Resolve<T> {
   ): unknown[] {
     if (index >= 0 && index < sources.length) {
       const item = sources[index];
-      if (item === undefined) {
-        return [];
+      if (item !== undefined) {
+        return [item];
       }
-      if (Array.isArray(item)) {
-        return [...item];
-      }
-      return [item];
     }
+    return [];
+  }
+
+  private readIndex(
+    sources: readonly unknown[],
+    index: number
+  ): unknown[] {
+    if (sources.length === 1 && Array.isArray(sources[0])) {
+      const inner = sources[0];
+      if (index >= 0 && index < inner.length) {
+        const val = inner[index];
+        return val !== undefined ? [val] : [];
+      }
+      return [];
+    }
+
+    if (index >= 0 && index < sources.length) {
+      const item = sources[index];
+      if (item !== undefined) {
+        return [item];
+      }
+    }
+
     return [];
   }
 
@@ -574,6 +867,13 @@ export class Resolve<T> {
 
 /**
  * Main public entrypoint for creating a Resolve instance.
+ *
+ * @param source The target object, array, or primitive data to resolve.
+ *
+ * @example
+ * ```ts
+ * const names = resolve(data).get("teams.members.name").values();
+ * ```
  */
 export function resolve<T>(source: T): Resolve<T> {
   return Resolve.from(source);

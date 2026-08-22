@@ -113,6 +113,21 @@ describe("resolve", () => {
       expect(resolve(list).get("[0]").value()).toBe("apple");
       expect(resolve(list).get("[2]").value()).toBe("cherry");
     });
+
+    it("preserves array items on explicit index selection without accidental flattening", () => {
+      const matrix = [
+        [10, 20],
+        [30, 40],
+      ];
+
+      // get("[0]") selects the first row [10, 20] as an array, not flattened to numbers
+      expect(resolve(matrix).get("[0]").value()).toEqual([10, 20]);
+      expect(resolve(matrix).get("[0]").values()).toEqual([[10, 20]]);
+      expect(resolve(matrix).get("[1]").value()).toEqual([30, 40]);
+
+      // at(0) selects the first row [10, 20]
+      expect(resolve(matrix).at(0).value()).toEqual([10, 20]);
+    });
   });
 
   describe("Filtering and predicates", () => {

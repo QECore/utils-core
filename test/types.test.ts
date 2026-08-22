@@ -1,5 +1,5 @@
 import { describe, expectTypeOf, it } from "vitest";
-import { resolve } from "../src";
+import { resolve, combinations, combine } from "../src";
 import type { Path, ValueAtPath } from "../src/Resolve/types";
 
 describe("Type Inference and Compile-time Checks", () => {
@@ -135,6 +135,16 @@ describe("Type Inference and Compile-time Checks", () => {
 
     const strSum = resolve(["a", "b"]).sum();
     expectTypeOf(strSum).toEqualTypeOf<string>();
+
+    const numbers: number[] = [];
+    expectTypeOf(resolve(numbers).sum()).toEqualTypeOf<number>();
+
+    const strings: string[] = [];
+    expectTypeOf(resolve(strings).sum()).toEqualTypeOf<string>();
+
+    // Unsupported types resolve sum() to never
+    const bools = [true, false];
+    expectTypeOf<ReturnType<typeof resolve<boolean[]>>["sum"]>().toEqualTypeOf<() => never>();
   });
 
   it("handles optional and nullable properties with proper type inference", () => {
@@ -185,5 +195,13 @@ describe("Type Inference and Compile-time Checks", () => {
 
     // @ts-expect-error invalid deep array member path
     resolve(data).get("teams.members.invalid");
+  });
+
+  it("infers types for combinations and combine", () => {
+    const browsers = combinations({ browser: ["chromium", "firefox"] });
+    const envs = combinations({ env: ["local", "ci"] });
+
+    const combined = combine(browsers, envs);
+    expectTypeOf(combined).toBeArray();
   });
 });
