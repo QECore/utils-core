@@ -86,6 +86,6 @@ export interface CombinationsFunction {
    * ```
    */
   combine<
-    const T extends readonly (readonly CombinationCase<unknown>[])[],
-  >(...lists: T): Array<T[number][number]>;
+    const Lists extends readonly (readonly CombinationCase<unknown>[])[],
+  >(...lists: Lists): Lists[number][number][];
 }

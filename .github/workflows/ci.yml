@@ -45,8 +45,8 @@ jobs:
           cd .smoke-consumer
           npm init -y
           npm install ../$TARBALL typescript @types/node
-          node -e "const { resolve, combinations, combine } = require('utils-core'); const res = resolve([10, 20]).sum(); const cases = combinations({ a: [1, 2] }); const all = combine(cases, cases); if (res !== 30 || all.length !== 4) throw new Error('CJS failed'); console.log('CJS smoke test passed');"
-          node --input-type=module -e "import { resolve, combinations, combine } from 'utils-core'; const res = resolve({ users: [{ name: 'Alice' }] }).get('users.name').first(); if (res !== 'Alice') throw new Error('ESM failed'); console.log('ESM smoke test passed');"
+          node -e "const { resolve, combinations, combine } = require('utils-core'); const teams = [{ name: 'Core', lead: { role: 'admin' } }, { name: 'Ops', lead: { role: 'dev' } }]; const adminTeams = resolve({ teams }).get('teams').where('lead.role:admin').values(); const val = resolve([10, 20, 30]).value(1); const numContains = resolve([123, 456]).contains(123).length === 1 && resolve([123, 456]).contains(23).length === 0; const strContains = resolve('hello world').contains('world').length === 1; const cases = combinations({ a: [1, 2] }); const all = combine(cases, cases); if (adminTeams.length !== 1 || val !== 20 || !numContains || !strContains || all.length !== 4) throw new Error('CJS assertions failed'); console.log('CJS smoke test passed');"
+          node --input-type=module -e "import { resolve, combinations, combine } from 'utils-core'; const teams = [{ name: 'Core', lead: { role: 'admin' } }]; const res = resolve({ teams }).get('teams').where('lead.role:admin').values(); const val = resolve([10, 20, 30]).value(1); const numContains = resolve([123, 456]).contains(123).length === 1 && resolve([123, 456]).contains(23).length === 0; const b = combinations({ b: [1, 2] }); const all = combine(b, b); if (res.length !== 1 || val !== 20 || !numContains || all.length !== 4) throw new Error('ESM assertions failed'); console.log('ESM smoke test passed');"
           cat << 'EOF' > tsconfig.json
           {
             "compilerOptions": {
@@ -62,11 +62,20 @@ jobs:
           mkdir src
           cat << 'EOF' > src/index.ts
           import { resolve, combinations, combine } from "utils-core";
-          const data = { users: [{ name: "Alice", age: 30 }] };
-          const names: string[] = resolve(data).get("users.name").values();
-          const first: string | undefined = resolve(data).get("users.name").first();
+          const data = {
+            teams: [
+              { name: "Platform", lead: { role: "admin" }, members: [{ name: "Alice", age: 30 }] },
+              { name: "QA", lead: { role: "member" }, members: [{ name: "Bob", age: 25 }] },
+            ],
+          };
+          const names: string[] = resolve(data).get("teams.members.name").values();
+          const first: string | undefined = resolve(data).get("teams.members.name").first();
+          const second: string | undefined = resolve(data).get("teams.members.name").value(1);
+          const adminTeams = resolve(data).get("teams").where("lead.role:admin").values();
+          const hasAlice: string[] = resolve(names).contains("Alice");
           const cases = combinations({ browser: ["chrome", "firefox"] });
           const all = combine(cases, cases);
+          console.log("TS smoke check passed:", names.length, first, second, adminTeams.length, hasAlice.length, all.length);
           EOF
           npx tsc
           cd ..

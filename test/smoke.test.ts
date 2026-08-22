@@ -10,36 +10,75 @@ describe("Built Artifact Smoke Test (Dual ESM & CJS)", () => {
   const sampleData = {
     teams: [
       {
+        name: "Platform",
+        lead: { role: "admin" },
         members: [{ name: "John" }, { name: "Shan" }],
+      },
+      {
+        name: "QA",
+        lead: { role: "member" },
+        members: [{ name: "Charlie" }],
       },
     ],
   };
 
-  it("works seamlessly with ESM built artifact", () => {
+  it("verifies full functional semantics with ESM built artifact", () => {
     const members = esmResolve(sampleData).get("teams.members.name").values();
-    expect(members).toEqual(["John", "Shan"]);
+    expect(members).toEqual(["John", "Shan", "Charlie"]);
 
-    const cases = esmCombinations({
-      env: ["staging", "prod"],
-    });
-    expect(cases).toHaveLength(2);
-    expect(cases[0]?.name).toBe("staging");
+    // where() filtering
+    const adminTeams = esmResolve(sampleData).get("teams").where("lead.role:admin").values();
+    expect(adminTeams).toHaveLength(1);
+    expect(adminTeams[0]?.name).toBe("Platform");
 
-    const combined = esmCombine(cases, cases);
+    // value(index), first(), last()
+    const r = esmResolve(members);
+    expect(r.value()).toBe("John");
+    expect(r.value(1)).toBe("Shan");
+    expect(r.first()).toBe("John");
+    expect(r.last()).toBe("Charlie");
+
+    // contains() on strings and arrays
+    expect(esmResolve("hello world").contains("world")).toEqual(["hello world"]);
+    expect(esmResolve([123, 456]).contains(123)).toEqual([123]);
+    expect(esmResolve([123, 456]).contains(23)).toEqual([]);
+
+    // combinations & combine()
+    const browsers = esmCombinations({ browser: ["chromium", "firefox"] });
+    const envs = esmCombinations({ env: ["local", "ci"] });
+    const combined = esmCombine(browsers, envs);
     expect(combined).toHaveLength(4);
+    expect(combined[0]?.data).toEqual({ browser: "chromium" });
+    expect(combined[2]?.data).toEqual({ env: "local" });
   });
 
-  it("works seamlessly with CJS built artifact", () => {
+  it("verifies full functional semantics with CJS built artifact", () => {
     const members = cjsResolve(sampleData).get("teams.members.name").values();
-    expect(members).toEqual(["John", "Shan"]);
+    expect(members).toEqual(["John", "Shan", "Charlie"]);
 
-    const cases = cjsCombinations({
-      env: ["staging", "prod"],
-    });
-    expect(cases).toHaveLength(2);
-    expect(cases[0]?.name).toBe("staging");
+    // where() filtering
+    const adminTeams = cjsResolve(sampleData).get("teams").where("lead.role:admin").values();
+    expect(adminTeams).toHaveLength(1);
+    expect(adminTeams[0]?.name).toBe("Platform");
 
-    const combined = cjsCombine(cases, cases);
+    // value(index), first(), last()
+    const r = cjsResolve(members);
+    expect(r.value()).toBe("John");
+    expect(r.value(1)).toBe("Shan");
+    expect(r.first()).toBe("John");
+    expect(r.last()).toBe("Charlie");
+
+    // contains() on strings and arrays
+    expect(cjsResolve("hello world").contains("world")).toEqual(["hello world"]);
+    expect(cjsResolve([123, 456]).contains(123)).toEqual([123]);
+    expect(cjsResolve([123, 456]).contains(23)).toEqual([]);
+
+    // combinations & combine()
+    const browsers = cjsCombinations({ browser: ["chromium", "firefox"] });
+    const envs = cjsCombinations({ env: ["local", "ci"] });
+    const combined = cjsCombine(browsers, envs);
     expect(combined).toHaveLength(4);
+    expect(combined[0]?.data).toEqual({ browser: "chromium" });
+    expect(combined[2]?.data).toEqual({ env: "local" });
   });
 });
