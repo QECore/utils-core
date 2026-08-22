@@ -31,11 +31,11 @@ jobs:
       - name: Run typecheck
         run: npm run typecheck
 
-      - name: Run tests
-        run: npm test
-
       - name: Build package
         run: npm run build
+
+      - name: Run tests
+        run: npm test
 
       - name: Verify package tarball
         run: npm pack --dry-run
