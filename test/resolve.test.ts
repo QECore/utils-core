@@ -113,6 +113,21 @@ describe("resolve", () => {
       expect(resolve(list).get("[0]").value()).toBe("apple");
       expect(resolve(list).get("[2]").value()).toBe("cherry");
     });
+
+    it("preserves array items on explicit index selection without accidental flattening", () => {
+      const matrix = [
+        [10, 20],
+        [30, 40],
+      ];
+
+      // get("[0]") selects the first row [10, 20] as an array, not flattened to numbers
+      expect(resolve(matrix).get("[0]").value()).toEqual([10, 20]);
+      expect(resolve(matrix).get("[0]").values()).toEqual([[10, 20]]);
+      expect(resolve(matrix).get("[1]").value()).toEqual([30, 40]);
+
+      // at(0) selects the first row [10, 20]
+      expect(resolve(matrix).at(0).value()).toEqual([10, 20]);
+    });
   });
 
   describe("Filtering and predicates", () => {
@@ -125,7 +140,7 @@ describe("resolve", () => {
       ],
     };
 
-    it("filters using where() and get('key:value')", () => {
+    it("filters using where() with case-insensitive substring matching", () => {
       const adminsFromWhere = resolve(dataset)
         .get("users")
         .where("role:admin")
@@ -133,11 +148,25 @@ describe("resolve", () => {
       expect(adminsFromWhere).toHaveLength(2);
       expect(adminsFromWhere.map((u) => u.name)).toEqual(["Alice", "Charlie"]);
 
-      const adminsFromGet = resolve(dataset)
+      // Case-insensitive matching: "ADMIN", "admin", "superadmin"
+      const adminsUpper = resolve(dataset)
         .get("users")
-        .get("role:admin")
+        .where("role:ADMIN")
         .values();
-      expect(adminsFromGet).toEqual(adminsFromWhere);
+      expect(adminsUpper).toEqual(adminsFromWhere);
+
+      const superadminsData = {
+        users: [
+          { name: "Root", role: "superadministrator" },
+          { name: "Member", role: "member" },
+        ],
+      };
+      const superadmins = resolve(superadminsData)
+        .get("users")
+        .where("role:admin")
+        .values();
+      expect(superadmins).toHaveLength(1);
+      expect(superadmins[0]?.name).toBe("Root");
     });
 
     it("filters with equals and notEquals", () => {
@@ -169,11 +198,24 @@ describe("resolve", () => {
       expect(resolve(data).get("ids").contains(2)).toEqual([2]);
     });
 
-    it("supports deep path matching in where()", () => {
+    it("supports deep path matching in where() including nested array members where ANY match qualifies", () => {
       const teamsData = {
         teams: [
-          { teamName: "Core", lead: { role: "admin", name: "Alice" } },
-          { teamName: "Ops", lead: { role: "engineer", name: "Bob" } },
+          {
+            teamName: "Core",
+            lead: { role: "admin", name: "Alice" },
+            members: [
+              { name: "John", role: "developer" },
+              { name: "Shan", role: "architect" },
+            ],
+          },
+          {
+            teamName: "Ops",
+            lead: { role: "engineer", name: "Bob" },
+            members: [
+              { name: "Charlie", role: "support" },
+            ],
+          },
         ],
       };
 
@@ -183,6 +225,20 @@ describe("resolve", () => {
         .values();
       expect(adminTeams).toHaveLength(1);
       expect(adminTeams[0]?.teamName).toBe("Core");
+
+      // Nested collection matching: if ANY member matches, the team qualifies
+      const devTeams = resolve(teamsData)
+        .get("teams")
+        .where("members.role:developer")
+        .values();
+      expect(devTeams).toHaveLength(1);
+      expect(devTeams[0]?.teamName).toBe("Core");
+
+      const noMatchTeams = resolve(teamsData)
+        .get("teams")
+        .where("members.role:sales")
+        .values();
+      expect(noMatchTeams).toHaveLength(0);
     });
 
     it("filters with numeric comparisons", () => {
@@ -218,6 +274,52 @@ describe("resolve", () => {
   });
 
   describe("Aggregations and terminal operations", () => {
+    it("supports value(), value(index), first(), last(), and values()", () => {
+      const numbers = [10, 20, 30, 40];
+      const r = resolve(numbers);
+
+      expect(r.value()).toBe(10);
+      expect(r.value(0)).toBe(10);
+      expect(r.value(1)).toBe(20);
+      expect(r.value(2)).toBe(30);
+      expect(r.value(99)).toBeUndefined();
+      // Negative index does not act as last, returns undefined
+      expect(r.value(-1)).toBeUndefined();
+
+      expect(r.first()).toBe(10);
+      expect(r.last()).toBe(40);
+      expect(r.values()).toEqual([10, 20, 30, 40]);
+    });
+
+    it("distinguishes between at(index) pipeline operation and value(index) terminal operation", () => {
+      const users = [
+        { name: "John", age: 30 },
+        { name: "Shan", age: 25 },
+        { name: "Alice", age: 28 },
+      ];
+
+      // at(index) returns a new Resolve pipeline instance that can be chained further
+      const secondUserResolver = resolve(users).at(1);
+      expect(secondUserResolver.get("name").value()).toBe("Shan");
+
+      // value(index) returns the terminal value directly (not a Resolve object)
+      const thirdUser = resolve(users).value(2);
+      expect(thirdUser).toEqual({ name: "Alice", age: 28 });
+    });
+
+    it("ensures resolve() does not mutate input source", () => {
+      const original = {
+        users: [{ name: "John" }, { name: "Shan" }],
+      };
+      const copy = JSON.parse(JSON.stringify(original));
+
+      resolve(original).get("users.name").values();
+      resolve(original).get("users").at(0).value();
+      resolve(original).where("users.name:John").values();
+
+      expect(original).toEqual(copy);
+    });
+
     it("computes count(), first(), last(), and exists()", () => {
       const empty: number[] = [];
       expect(resolve(empty).count()).toBe(0);

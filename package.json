@@ -6,12 +6,12 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/shanmukaanem/utils-core.git"
+    "url": "git+https://github.com/QECore/utils-core.git"
   },
   "bugs": {
-    "url": "https://github.com/shanmukaanem/utils-core/issues"
+    "url": "https://github.com/QECore/utils-core/issues"
   },
-  "homepage": "https://github.com/shanmukaanem/utils-core#readme",
+  "homepage": "https://github.com/QECore/utils-core#readme",
   "engines": {
     "node": ">=18.0.0"
   },
@@ -33,6 +33,7 @@
   ],
   "scripts": {
     "build": "tsup",
+    "pretest": "npm run build",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",

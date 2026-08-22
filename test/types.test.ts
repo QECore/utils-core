@@ -1,5 +1,7 @@
 import { describe, expectTypeOf, it } from "vitest";
-import { resolve, type Path, type ValueAtPath } from "../src";
+import { resolve, combinations, combine } from "../src";
+import type { CombinationCase } from "../src/Combinations/types";
+import type { Path, ValueAtPath } from "../src/Resolve/types";
 
 describe("Type Inference and Compile-time Checks", () => {
   interface User {
@@ -134,5 +136,203 @@ describe("Type Inference and Compile-time Checks", () => {
 
     const strSum = resolve(["a", "b"]).sum();
     expectTypeOf(strSum).toEqualTypeOf<string>();
+
+    const numbers: number[] = [];
+    expectTypeOf(resolve(numbers).sum()).toEqualTypeOf<number>();
+
+    const strings: string[] = [];
+    expectTypeOf(resolve(strings).sum()).toEqualTypeOf<string>();
+
+    // Unsupported types resolve sum() to never
+    const bools = [true, false];
+    expectTypeOf<ReturnType<typeof resolve<boolean[]>>["sum"]>().toEqualTypeOf<() => never>();
+  });
+
+  it("handles optional and nullable properties with proper type inference", () => {
+    type OptionalUser = {
+      name?: string;
+      age?: number;
+      profile?: {
+        bio?: string;
+      };
+    };
+
+    const user: OptionalUser = {
+      name: "John",
+      profile: { bio: "Software Engineer" },
+    };
+
+    const nameResolver = resolve(user).get("name");
+    expectTypeOf(nameResolver.value()).toEqualTypeOf<string | undefined>();
+
+    const ageResolver = resolve(user).get("age");
+    expectTypeOf(ageResolver.value()).toEqualTypeOf<number | undefined>();
+
+    const bioResolver = resolve(user).get("profile.bio");
+    expectTypeOf(bioResolver.value()).toEqualTypeOf<string | undefined>();
+  });
+
+  it("rejects invalid property paths at compile time with @ts-expect-error", () => {
+    const data = {
+      teams: [
+        {
+          name: "Engineering",
+          members: [{ name: "John", age: 30 }],
+        },
+      ],
+      company: {
+        location: "NY",
+      },
+    };
+
+    // @ts-expect-error invalid top-level path
+    resolve(data).get("invalid");
+
+    // @ts-expect-error invalid nested path
+    resolve(data).get("company.invalid");
+
+    // @ts-expect-error invalid nested array path
+    resolve(data).get("teams.invalid");
+
+    // @ts-expect-error invalid deep array member path
+    resolve(data).get("teams.members.invalid");
+
+    // @ts-expect-error matcher expression cannot be passed to get()
+    resolve(data).get("role:admin");
+  });
+
+  it("enforces strong type safety for where() matcher paths", () => {
+    interface Lead {
+      role: string;
+      level: number;
+    }
+    interface Dept {
+      deptName: string;
+      lead: Lead;
+    }
+    const org = {
+      depts: [
+        { deptName: "Platform", lead: { role: "admin", level: 5 } },
+      ] as Dept[],
+    };
+
+    // Valid where matchers
+    resolve(org).get("depts").where("deptName:Platform");
+    resolve(org).get("depts").where("lead.role:admin");
+    resolve(org).get("depts").where("lead.level:5");
+
+    // Invalid where matchers
+    // @ts-expect-error invalid top-level matcher path
+    resolve(org).get("depts").where("invalid:value");
+
+    // @ts-expect-error invalid nested matcher path
+    resolve(org).get("depts").where("lead.invalid:value");
+  });
+
+  it("verifies terminal value() index and values() type signatures", () => {
+    const data: RootData = {
+      teams: [
+        {
+          teamName: "Core",
+          members: [{ id: 1, name: "John", roles: ["admin"], active: true }],
+        },
+      ],
+      company: { location: "SF", founded: 2020 },
+    };
+
+    const resolver = resolve(data).get("teams");
+
+    expectTypeOf(resolver.value()).toEqualTypeOf<Team | undefined>();
+    expectTypeOf(resolver.value(0)).toEqualTypeOf<Team | undefined>();
+    expectTypeOf(resolver.value(1)).toEqualTypeOf<Team | undefined>();
+    expectTypeOf(resolver.first()).toEqualTypeOf<Team | undefined>();
+    expectTypeOf(resolver.last()).toEqualTypeOf<Team | undefined>();
+    expectTypeOf(resolver.values()).toEqualTypeOf<Team[]>();
+  });
+
+  it("infers exact resolved combination and combine union types", () => {
+    // TEST 1: candidate arrays resolve to union of elements
+    const browserCases = combinations({
+      browser: ["chrome", "firefox"],
+    });
+    expectTypeOf(browserCases[0]!.data.browser).toEqualTypeOf<"chrome" | "firefox">();
+
+    // TEST 2: multi-option combinations infer resolved record
+    const multiCases = combinations({
+      browser: ["chrome", "firefox"],
+      env: ["local", "ci"],
+    });
+    expectTypeOf(multiCases[0]!.data).toMatchTypeOf<{
+      browser: "chrome" | "firefox";
+      env: "local" | "ci";
+    }>();
+    expectTypeOf(multiCases[0]!.data.browser).toEqualTypeOf<"chrome" | "firefox">();
+    expectTypeOf(multiCases[0]!.data.env).toEqualTypeOf<"local" | "ci">();
+
+    // TEST 3: combine preserves union of input cases without merging object shapes
+    const envCases = combinations({
+      env: ["local", "ci"],
+    });
+    const combined = combine(browserCases, envCases);
+    expectTypeOf(combined[0]!).toEqualTypeOf<
+      | (typeof browserCases)[number]
+      | (typeof envCases)[number]
+    >();
+
+    // combine must reject non-CombinationCase arrays at compile time
+    // @ts-expect-error non-CombinationCase array passed to combine()
+    combine([1, 2, 3]);
+
+    // @ts-expect-error non-CombinationCase array passed to combinations.combine()
+    combinations.combine([{ notACase: true }]);
+
+    // TEST 4: combinations.combine produces identical type inference
+    const combinedViaMethod = combinations.combine(browserCases, envCases);
+    expectTypeOf(combinedViaMethod).toEqualTypeOf<typeof combined>();
+
+    // TEST 5: object candidates in arrays remain discrete values
+    const userCases = combinations({
+      user: [
+        { role: "admin" },
+        { role: "user" },
+      ],
+    });
+    expectTypeOf(userCases[0]!.data.user.role).toEqualTypeOf<"admin" | "user">();
+
+    // TEST 6: combinations.asArray retains array payload shape
+    const arrayCases = combinations.asArray([
+      { browser: ["chrome", "firefox"] },
+      { env: ["local", "ci"] },
+    ]);
+    expectTypeOf(arrayCases[0]!.data).toMatchTypeOf<
+      ({ readonly browser: "chrome" | "firefox" } | { readonly env: "local" | "ci" })[]
+    >();
+    expectTypeOf(arrayCases[0]!.data).toBeArray();
+  });
+
+  it("infers types for combinations and combine with standard interfaces", () => {
+    interface BrowserConfig {
+      browser: string[];
+      version: number[];
+    }
+
+    const config: BrowserConfig = {
+      browser: ["chrome", "firefox"],
+      version: [120, 121],
+    };
+
+    const cases = combinations(config);
+    expectTypeOf(cases).toEqualTypeOf<CombinationCase<{ browser: string; version: number }>[]>();
+    expectTypeOf(cases[0]!.data.browser).toEqualTypeOf<string>();
+    expectTypeOf(cases[0]!.data.version).toEqualTypeOf<number>();
+
+    const envs = combinations({ env: ["local", "ci"] });
+    const combined = combine(cases, envs);
+    expectTypeOf(combined).toEqualTypeOf<
+      (
+        | CombinationCase<{ browser: string; version: number }>
+        | CombinationCase<{ readonly env: "local" | "ci" }>
+      )[]
+    >();
   });
 });

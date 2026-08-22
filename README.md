@@ -35,6 +35,7 @@ const data = {
   teams: [
     {
       name: "Engineering",
+      lead: { role: "admin", name: "Alice" },
       members: [
         { id: 1, name: "John", role: "developer", age: 30 },
         { id: 2, name: "Shan", role: "architect", age: 35 },
@@ -42,9 +43,9 @@ const data = {
     },
     {
       name: "Product",
+      lead: { role: "manager", name: "Bob" },
       members: [
-        { id: 3, name: "Alice", role: "manager", age: 28 },
-        { id: 4, name: "Bob", role: "designer", age: 32 },
+        { id: 3, name: "Charlie", role: "designer", age: 28 },
       ],
     },
   ],
@@ -56,36 +57,51 @@ const data = {
 Array boundaries are automatically flattened by one level during property traversal:
 
 ```ts
-// Returns: [{ id: 1, name: "John", ... }, { id: 2, ... }, { id: 3, ... }, { id: 4, ... }]
+// Returns: [{ id: 1, name: "John", ... }, { id: 2, ... }, { id: 3, ... }]
 const allMembers = resolve(data)
   .get("teams.members")
   .values();
 
-// Returns: ["John", "Shan", "Alice", "Bob"]
+// Returns: ["John", "Shan", "Charlie"]
 const memberNames = resolve(data)
   .get("teams.members.name")
   .values();
 ```
 
-### Array Indexing
+### Array Indexing (`at(index)` vs `value(index)`)
 
-Use explicit index notation or `.at(index)`:
+- `at(index)` is a **lazy pipeline operation** returning a `Resolve` instance for further chaining.
+- `value(index)` is a **terminal operation** returning the resolved value directly.
 
 ```ts
-// Property index
-resolve(data).get("teams[0].members[1].name").value(); // "Shan"
-
-// Multi-dimensional array index
-const matrix = [[10, 20], [30, 40]];
-resolve(matrix).get("[0][1]").value(); // 20
-
-// Method index
+// Pipeline operation
 resolve(data).get("teams").at(0).get("name").value(); // "Engineering"
+
+// Terminal operation with index
+resolve(data).get("teams.members.name").value();  // "John" (defaults to index 0)
+resolve(data).get("teams.members.name").value(0); // "John"
+resolve(data).get("teams.members.name").value(1); // "Shan"
+resolve(data).get("teams.members.name").value(2); // "Charlie"
+
+// Matrix index selection (preserves nested arrays without accidental flattening)
+const matrix = [[10, 20], [30, 40]];
+resolve(matrix).get("[0]").value(); // [10, 20]
 ```
+
+### Terminal Value Operations
+
+| Method | Return Type | Description |
+| :--- | :--- | :--- |
+| `.value(index?)` | `T \| undefined` | Returns the resolved value at `index` (defaults to index `0`) |
+| `.first()` | `T \| undefined` | Returns the first resolved value (implemented via `.value(0)`) |
+| `.last()` | `T \| undefined` | Returns the last resolved value |
+| `.values()` | `T[]` | Returns all resolved values as an array |
+| `.count()` | `number` | Returns the total number of resolved items |
+| `.exists()` | `boolean` | `true` if at least one item was resolved |
 
 ### Type-Safe Equality and Predicates
 
-`equals()` and `notEquals()` enforce strict type agreement with the resolved value:
+`equals()` and `notEquals()` enforce strict compile-time type safety against the resolved type:
 
 ```ts
 resolve(data).get("teams[0].members[0].age").equals(30); // Valid
@@ -94,23 +110,40 @@ resolve(data).get("teams[0].members[0].age").equals(30); // Valid
 resolve(data).get("teams[0].members[0].age").equals("30");
 ```
 
-`contains()` uses substring matching for string values and exact element membership for arrays:
+Date comparisons evaluate timestamp equality via `.getTime()`:
+
+```ts
+resolve({ date: new Date("2025-01-01") })
+  .get("date")
+  .equals(new Date("2025-01-01")); // matches
+```
+
+### `contains()` Semantics
+
+- **Strings**: Case-insensitive substring matching.
+- **Arrays**: Strict element membership (exact match without string conversion).
 
 ```ts
 // Substring search on strings
 resolve("hello world").contains("world"); // ["hello world"]
 
-// Array membership (not string conversion)
+// Array element membership
 resolve(["admin", "user"]).contains("admin"); // ["admin"]
 resolve([123, 456]).contains(23);             // []
 ```
 
 ### Filtering with `where()`
 
-Filter collections using property matchers or deep paths:
+Filters collection items by evaluating a path expression formatted as `"path:expected"`. Matching is performed as a case-insensitive substring search against the resolved string value at that path:
 
 ```ts
-// Filter with deep matcher
+// Filter teams where lead.role contains "admin"
+const adminTeams = resolve(data)
+  .get("teams")
+  .where("lead.role:admin")
+  .values();
+
+// Filter teams where any member has role "developer" (multiple resolved values match if ANY qualifies)
 const devTeams = resolve(data)
   .get("teams")
   .where("members.role:developer")
@@ -119,7 +152,7 @@ const devTeams = resolve(data)
 
 ### Homogeneous `sum()`
 
-`sum()` aggregates numbers or concatenates strings. Mixed or unsupported types throw a `TypeError`:
+`sum()` aggregates numbers to `number` or concatenates strings to `string`. Mixed or unsupported types throw a `TypeError`:
 
 ```ts
 resolve([1, 2, 3]).sum();      // 6
@@ -127,33 +160,8 @@ resolve(["a", "b", "c"]).sum(); // "abc"
 resolve([]).sum();              // 0
 
 resolve([1, "2"]).sum();        // Throws TypeError (mixed types)
+resolve([true]).sum();          // Throws TypeError (unsupported type)
 ```
-
-### Terminal Operations
-
-| Method | Return Type | Description |
-| :--- | :--- | :--- |
-| `.values()` | `T[]` | Returns all resolved values as an array |
-| `.value()` | `T \| undefined` | Returns the first resolved value or `undefined` |
-| `.first()` | `T \| undefined` | Alias for `.value()` |
-| `.last()` | `T \| undefined` | Returns the last resolved value or `undefined` |
-| `.count()` | `number` | Returns total number of resolved items |
-| `.exists()` | `boolean` | `true` if at least one item was resolved |
-| `.sum()` | `number \| string` | Sums numeric values or concatenates string values |
-| `.equals(expected)` | `T[]` | Filters items equal to `expected` (strictly typed) |
-| `.notEquals(expected)` | `T[]` | Filters items not equal to `expected` (strictly typed) |
-| `.contains(target)` | `T[]` | Substring match for strings, membership match for arrays |
-| `.startsWith(str)` | `T[]` | Filters strings starting with `str` |
-| `.endsWith(str)` | `T[]` | Filters strings ending with `str` |
-| `.greaterThan(num)` | `T[]` | Filters values `> num` |
-| `.greaterThanOrEqual(num)` | `T[]` | Filters values `>= num` |
-| `.lessThan(num)` | `T[]` | Filters values `< num` |
-| `.lessThanOrEqual(num)` | `T[]` | Filters values `<= num` |
-| `.isNull()` | `T[]` | Filters `null` values |
-| `.isUndefined()` | `T[]` | Filters `undefined` values |
-| `.isTruthy()` | `T[]` | Filters truthy values |
-| `.isFalsy()` | `T[]` | Filters falsy values |
-| `.matches(regex)` | `T[]` | Filters strings matching regular expression (safe with `/g`/`/y`) |
 
 ---
 
@@ -205,6 +213,47 @@ const testCases = combinations({
 ]
 ```
 
+### Empty Candidate Arrays
+
+An option with zero candidate values produces zero combinations ($N \times 0 = 0$):
+
+```ts
+combinations({ browser: [] }); // []
+combinations({ browser: ["chromium"], env: [] }); // []
+```
+
+### Objects Inside Candidate Arrays
+
+Objects inside candidate arrays are treated as discrete candidate **values** (not recursively Cartesian expanded):
+
+```ts
+const cases = combinations({
+  user: [
+    { role: "admin" },
+    { role: "user" },
+  ],
+});
+
+// cases[0].data === { user: { role: "admin" } }
+// cases[1].data === { user: { role: "user" } }
+```
+
+### Nested Objects & Playwright Tags
+
+Nested objects outside candidate arrays are Cartesian expanded and generate path-based metadata tags:
+
+```ts
+const cases = combinations({
+  user: {
+    role: ["admin", "member"],
+    active: true,
+  },
+  mode: ["standard"],
+});
+
+// cases[0].metadata.tags === ["@user.role:admin", "@user.active:true", "@mode:standard"]
+```
+
 ### Custom `nameSeparator`
 
 ```ts
@@ -217,21 +266,6 @@ const cases = combinations(
 );
 
 // cases[0].name === "chromium | staging"
-```
-
-### Nested Objects & Playwright Tags
-
-Nested objects produce path-based metadata tags automatically:
-
-```ts
-const cases = combinations({
-  user: {
-    role: ["admin", "member"],
-  },
-  auth: ["sso"],
-});
-
-// cases[0].metadata.tags === ["@user.role:admin", "@auth:sso"]
 ```
 
 ### `combinations.asArray`
@@ -249,7 +283,7 @@ const cases = combinations.asArray([
 
 ### Combining Generated Outputs (`combine`)
 
-Concatenate independent combination suites without multiplying them:
+Concatenate independent combination suites into a single test collection without multiplying them:
 
 ```ts
 import { combinations, combine } from "utils-core";
@@ -259,14 +293,13 @@ const environments = combinations({ env: ["local", "ci"] });
 
 // 2 browser cases + 2 env cases = 4 total cases
 const allCases = combine(browsers, environments);
-// or: combinations.combine(browsers, environments)
 ```
 
 ---
 
 ## TypeScript & Type Safety
 
-`utils-core` provides end-to-end type safety. Invalid property paths are caught at compile time:
+`utils-core` provides end-to-end compile-time type safety. Invalid property paths are caught at compile time:
 
 ```ts
 const data = {
