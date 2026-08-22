@@ -1,5 +1,6 @@
 import { describe, expectTypeOf, it } from "vitest";
-import { resolve, type Path, type ValueAtPath } from "../src";
+import { resolve } from "../src";
+import type { Path, ValueAtPath } from "../src/Resolve/types";
 
 describe("Type Inference and Compile-time Checks", () => {
   interface User {
