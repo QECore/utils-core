@@ -1,0 +1,58 @@
+{
+  "name": "utils-core",
+  "version": "0.0.1",
+  "description": "High-performance TypeScript utility library for type-safe data resolution and Cartesian product test combination generation.",
+  "author": "shanmukaanem <shanmukaanem@gmail.com>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/shanmukaanem/utils-core.git"
+  },
+  "bugs": {
+    "url": "https://github.com/shanmukaanem/utils-core/issues"
+  },
+  "homepage": "https://github.com/shanmukaanem/utils-core#readme",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "prepublishOnly": "npm run typecheck && npm run test && npm run build",
+    "clean": "node -e \"fs.rmSync('dist', { recursive: true, force: true })\""
+  },
+  "keywords": [
+    "utility",
+    "typescript",
+    "path-resolver",
+    "combinations",
+    "cartesian-product",
+    "data-extraction",
+    "test-matrix",
+    "playwright-tags"
+  ],
+  "devDependencies": {
+    "@types/node": "^22.13.4",
+    "tsup": "^8.4.0",
+    "typescript": "^5.7.3",
+    "vitest": "^3.0.5"
+  }
+}
