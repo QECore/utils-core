@@ -56,7 +56,7 @@ export interface CombinationsFunction {
   /**
    * Combines multiple combination case arrays into a single flattened array.
    */
-  combine<T extends readonly (readonly CombinationCase<any>[])[]>(
+  combine<T extends readonly (readonly CombinationCase<unknown>[])[]>(
     ...lists: T
   ): T[number][number][];
 }

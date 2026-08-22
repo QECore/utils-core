@@ -218,6 +218,49 @@ describe("resolve", () => {
   });
 
   describe("Aggregations and terminal operations", () => {
+    it("supports value(), value(index), first(), last(), and values()", () => {
+      const numbers = [10, 20, 30, 40];
+      const r = resolve(numbers);
+
+      expect(r.value()).toBe(10);
+      expect(r.value(0)).toBe(10);
+      expect(r.value(2)).toBe(30);
+      expect(r.value(99)).toBeUndefined();
+
+      expect(r.first()).toBe(10);
+      expect(r.last()).toBe(40);
+      expect(r.values()).toEqual([10, 20, 30, 40]);
+    });
+
+    it("distinguishes between at(index) pipeline operation and value(index) terminal operation", () => {
+      const users = [
+        { name: "John", age: 30 },
+        { name: "Shan", age: 25 },
+        { name: "Alice", age: 28 },
+      ];
+
+      // at(index) returns a new Resolve pipeline instance that can be chained further
+      const secondUserResolver = resolve(users).at(1);
+      expect(secondUserResolver.get("name").value()).toBe("Shan");
+
+      // value(index) returns the terminal value directly (not a Resolve object)
+      const thirdUser = resolve(users).value(2);
+      expect(thirdUser).toEqual({ name: "Alice", age: 28 });
+    });
+
+    it("ensures resolve() does not mutate input source", () => {
+      const original = {
+        users: [{ name: "John" }, { name: "Shan" }],
+      };
+      const copy = JSON.parse(JSON.stringify(original));
+
+      resolve(original).get("users.name").values();
+      resolve(original).get("users").at(0).value();
+      resolve(original).where("users.name:John").values();
+
+      expect(original).toEqual(copy);
+    });
+
     it("computes count(), first(), last(), and exists()", () => {
       const empty: number[] = [];
       expect(resolve(empty).count()).toBe(0);

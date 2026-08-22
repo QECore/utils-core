@@ -48,15 +48,14 @@ function valueToString(value: unknown): string {
 }
 
 /**
- * Generates possible values for a payload property.
+ * Generates possible candidate values for a payload property.
  *
  * Rules:
- * []                  -> [undefined]
- * [1, 2]              -> [1, 2]
- * [[1, 2], [3, 4]]    -> [[1, 2], [3, 4]]
- * [null]              -> [null]
- *
- * Objects are recursively resolved so nested payloads can participate in combinations.
+ * - Non-array plain objects: recursively resolved as a nested combination space.
+ * - Non-array scalar/primitive: treated as a single candidate value.
+ * - Array: each element is a candidate value directly. Objects inside candidate arrays
+ *   are preserved as discrete values and are not recursively expanded.
+ * - Empty array []: resolved to [undefined] (property not supplied).
  */
 function resolveValue(value: unknown): unknown[] {
   if (!Array.isArray(value)) {
@@ -72,14 +71,8 @@ function resolveValue(value: unknown): unknown[] {
     return [undefined];
   }
 
-  // Every element of the outer array is one candidate.
-  return value.flatMap((candidate) => {
-    if (isPlainObject(candidate)) {
-      return resolveObject(candidate);
-    }
-
-    return [candidate];
-  });
+  // Candidate array: each element of the array is a candidate value directly.
+  return [...value];
 }
 
 /**
@@ -228,7 +221,7 @@ function generateArrayCases<T extends CombinationInput>(
  * Concatenates multiple combination result arrays into a single collection.
  */
 export function combine<
-  T extends readonly (readonly CombinationCase<any>[])[],
+  T extends readonly (readonly CombinationCase<unknown>[])[],
 >(...lists: T): T[number][number][] {
   return (lists as unknown as unknown[][]).flat() as T[number][number][];
 }

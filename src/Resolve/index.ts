@@ -120,14 +120,16 @@ export class Resolve<T> {
     return this.execute() as ResolvedItem<T>[];
   }
 
-  value(): ResolvedItem<T> | undefined {
+  value(index = 0): ResolvedItem<T> | undefined {
     const results = this.execute();
-    return results.length > 0 ? (results[0] as ResolvedItem<T>) : undefined;
+    if (index >= 0 && index < results.length) {
+      return results[index] as ResolvedItem<T>;
+    }
+    return undefined;
   }
 
   first(): ResolvedItem<T> | undefined {
-    const results = this.execute();
-    return results.length > 0 ? (results[0] as ResolvedItem<T>) : undefined;
+    return this.value(0);
   }
 
   last(): ResolvedItem<T> | undefined {

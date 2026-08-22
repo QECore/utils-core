@@ -136,4 +136,54 @@ describe("Type Inference and Compile-time Checks", () => {
     const strSum = resolve(["a", "b"]).sum();
     expectTypeOf(strSum).toEqualTypeOf<string>();
   });
+
+  it("handles optional and nullable properties with proper type inference", () => {
+    type OptionalUser = {
+      name?: string;
+      age?: number;
+      profile?: {
+        bio?: string;
+      };
+    };
+
+    const user: OptionalUser = {
+      name: "John",
+      profile: { bio: "Software Engineer" },
+    };
+
+    const nameResolver = resolve(user).get("name");
+    expectTypeOf(nameResolver.value()).toEqualTypeOf<string | undefined>();
+
+    const ageResolver = resolve(user).get("age");
+    expectTypeOf(ageResolver.value()).toEqualTypeOf<number | undefined>();
+
+    const bioResolver = resolve(user).get("profile.bio");
+    expectTypeOf(bioResolver.value()).toEqualTypeOf<string | undefined>();
+  });
+
+  it("rejects invalid property paths at compile time with @ts-expect-error", () => {
+    const data = {
+      teams: [
+        {
+          name: "Engineering",
+          members: [{ name: "John", age: 30 }],
+        },
+      ],
+      company: {
+        location: "NY",
+      },
+    };
+
+    // @ts-expect-error invalid top-level path
+    resolve(data).get("invalid");
+
+    // @ts-expect-error invalid nested path
+    resolve(data).get("company.invalid");
+
+    // @ts-expect-error invalid nested array path
+    resolve(data).get("teams.invalid");
+
+    // @ts-expect-error invalid deep array member path
+    resolve(data).get("teams.members.invalid");
+  });
 });

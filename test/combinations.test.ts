@@ -153,21 +153,42 @@ describe("combinations", () => {
       expect(cases[3]?.data).toEqual({ environment: "ci" });
     });
 
-    it("supports combine() and combinations.combine() to merge generated collections", () => {
-      const browsers = combinations({ browser: ["chromium", "firefox"] });
-      const envs = combinations({ env: ["local", "ci"] });
+    it("treats objects inside candidate arrays as discrete values (not recursively Cartesian expanded)", () => {
+      const cases = combinations({
+        user: [
+          { role: "admin" },
+          { role: "user" },
+        ],
+      });
 
-      const combinedStandalone = combine(browsers, envs);
-      const combinedMethod = combinations.combine(browsers, envs);
+      expect(cases).toHaveLength(2);
+      expect(cases[0]?.data).toEqual({ user: { role: "admin" } });
+      expect(cases[1]?.data).toEqual({ user: { role: "user" } });
+    });
 
-      expect(combinedStandalone).toHaveLength(4);
-      expect(combinedStandalone).toEqual(combinedMethod);
-      expect(combinedStandalone.map((c) => c.name)).toEqual([
-        "chromium",
-        "firefox",
-        "local",
-        "ci",
-      ]);
+    it("supports combine() with 0, 1, 2, and 3 argument lists", () => {
+      expect(combine()).toEqual([]);
+
+      const a = combinations({ a: [1, 2] });
+      const b = combinations({ b: [3, 4] });
+      const c = combinations({ c: [5] });
+
+      expect(combine(a)).toHaveLength(2);
+      expect(combine(a, b)).toHaveLength(4);
+      expect(combine(a, b, c)).toHaveLength(5);
+    });
+
+    it("ensures combinations and combine do not mutate input objects or arrays", () => {
+      const input = {
+        browser: ["chromium", "firefox"],
+        config: { timeout: [1000, 2000] },
+      };
+      const copy = JSON.parse(JSON.stringify(input));
+
+      const cases = combinations(input);
+      combine(cases, cases);
+
+      expect(input).toEqual(copy);
     });
   });
 });
