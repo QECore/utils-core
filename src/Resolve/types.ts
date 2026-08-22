@@ -1,3 +1,6 @@
+/**
+ * Primitive scalar value types.
+ */
 export type Primitive =
   | string
   | number
@@ -7,14 +10,34 @@ export type Primitive =
   | null
   | undefined;
 
+/**
+ * Extracts string keys from an object type.
+ */
 export type StringKey<T> = Extract<keyof T, string>;
 
+/**
+ * Extracts the item type from an array, or `never` if not an array.
+ */
 export type ArrayItem<T> =
   T extends readonly (infer U)[] ? U : never;
 
+/**
+ * Resolves the underlying element type if `T` is an array, or returns `T` directly.
+ */
 export type ResolvedItem<T> =
   T extends readonly (infer U)[] ? U : T;
 
+/**
+ * Evaluates the return type of `sum()` based on the collection item type.
+ * Evaluates to `number` for number arrays, `string` for string arrays, and `never` for unsupported types.
+ *
+ * @example
+ * ```ts
+ * type N = SumResult<number[]>; // number
+ * type S = SumResult<string[]>; // string
+ * type X = SumResult<boolean[]>; // never
+ * ```
+ */
 export type SumResult<T> =
   ResolvedItem<T> extends number
     ? number
@@ -24,6 +47,9 @@ export type SumResult<T> =
         ? number | string
         : never;
 
+/**
+ * Target type for `contains()` filtering: substring needle for strings, or exact element value for arrays.
+ */
 export type ContainsTarget<T> =
   T extends readonly (infer U)[]
     ? U
@@ -33,6 +59,15 @@ export type ContainsTarget<T> =
  * PATH TYPES
  * ========================================================== */
 
+/**
+ * Type-safe dot-notated and indexed property paths for a given type `T`.
+ *
+ * @example
+ * ```ts
+ * type UserPaths = Path<{ users: [{ name: string }] }>;
+ * // "users" | "users.name" | "users[0].name" | ...
+ * ```
+ */
 export type Path<T> =
   T extends readonly (infer U)[]
     ? ArrayPath<U>
@@ -67,6 +102,15 @@ type ArrayPath<T> =
  * MATCHER
  * ========================================================== */
 
+/**
+ * Strongly-typed path matcher string formatted as `"path:expectedValue"`.
+ *
+ * @example
+ * ```ts
+ * type TeamMatcher = Matcher<{ lead: { role: string } }>;
+ * // "lead.role:string" | "lead.role:number" | ...
+ * ```
+ */
 export type Matcher<T> =
   T extends readonly (infer U)[]
     ? Matcher<U>
@@ -80,6 +124,15 @@ export type Matcher<T> =
  * VALUE AT PATH
  * ========================================================== */
 
+/**
+ * Resolves the TypeScript type located at the specified dot-notated or indexed path `P` in `T`.
+ *
+ * @example
+ * ```ts
+ * type Name = ValueAtPath<{ users: [{ name: string }] }, "users.name">;
+ * // string
+ * ```
+ */
 export type ValueAtPath<
   T,
   P extends string
@@ -117,6 +170,9 @@ export type ValueAtPath<
  * COMPARABLE
  * ========================================================== */
 
+/**
+ * Values supporting relative order comparison (e.g. `greaterThan`, `lessThan`).
+ */
 export type Comparable =
   | string
   | number

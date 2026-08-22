@@ -1,3 +1,6 @@
+/**
+ * Primitive and scalar value types supported in combinations.
+ */
 export type CombinationValue =
   | string
   | number
@@ -7,19 +10,60 @@ export type CombinationValue =
   | null
   | undefined;
 
+/**
+ * Metadata tags generated for a combination test case.
+ *
+ * @example
+ * ```ts
+ * const metadata: CombinationMetadata = {
+ *   tags: ["@browser:chromium", "@env:ci"],
+ * };
+ * ```
+ */
 export interface CombinationMetadata {
+  /**
+   * Playwright-style path metadata tags (e.g. `@browser:chromium`).
+   */
   tags: string[];
 }
 
+/**
+ * Represents a single generated Cartesian test case.
+ *
+ * @template T Type of the resolved combination data payload.
+ *
+ * @example
+ * ```ts
+ * const testCase: CombinationCase<{ browser: string }> = {
+ *   data: { browser: "chromium" },
+ *   name: "chromium",
+ *   metadata: { tags: ["@browser:chromium"] },
+ * };
+ * ```
+ */
 export interface CombinationCase<T> {
+  /**
+   * Resolved option data payload for this combination.
+   */
   data: T;
+
+  /**
+   * Deterministic human-readable name joined by the configured separator.
+   */
   name: string;
+
+  /**
+   * Metadata associated with this test case (e.g. tags).
+   */
   metadata: CombinationMetadata;
 }
 
+/**
+ * Configuration options for combination generation.
+ */
 export interface CombinationOptions {
   /**
-   * Separator used to generate the automatic testcase name.
+   * Separator used to join property values into the test case name.
    *
    * @default " - "
    *
@@ -34,6 +78,9 @@ export interface CombinationOptions {
   nameSeparator?: string;
 }
 
+/**
+ * Callable combinations generator function with attached helper methods.
+ */
 export interface CombinationsFunction {
   /**
    * Generates the Cartesian product of the supplied option values.
@@ -47,6 +94,7 @@ export interface CombinationsFunction {
    *   browser: ["chromium", "firefox"],
    *   env: ["local", "ci"],
    * });
+   * // Produces 4 test cases
    * ```
    */
   <T extends object>(
@@ -66,6 +114,7 @@ export interface CombinationsFunction {
    *   { browser: ["chromium", "firefox"] },
    *   { env: ["local", "ci"] }
    * ]);
+   * // Each case has data: [{ browser: "..." }, { env: "..." }]
    * ```
    */
   asArray<T extends object>(
@@ -83,6 +132,7 @@ export interface CombinationsFunction {
    * const browsers = combinations({ browser: ["chromium", "firefox"] });
    * const envs = combinations({ env: ["local", "ci"] });
    * const allCases = combinations.combine(browsers, envs);
+   * // Total 4 test cases (concatenated)
    * ```
    */
   combine<
