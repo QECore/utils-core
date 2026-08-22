@@ -40,12 +40,18 @@ export type ResolvedCombination<T extends object> = {
 };
 
 /**
- * Resolves the individual test case type from a combination collection.
+ * Extracts the item type from an array of combination cases, or `never` if not an array.
+ *
+ * @example
+ * ```ts
+ * type Case = CombinationListItem<CombinationCase<{ browser: string }>[]>;
+ * // CombinationCase<{ browser: string }>
+ * ```
  */
-export type CombinationCaseItem<T> =
-  T extends readonly (infer Case)[]
-    ? Case
-    : T;
+export type CombinationListItem<T> =
+  T extends readonly (infer Item)[]
+    ? Item
+    : never;
 
 /**
  * Metadata tags generated for a combination test case.
@@ -173,6 +179,6 @@ export interface CombinationsFunction {
    * ```
    */
   combine<
-    const Lists extends readonly (readonly CombinationCase<unknown>[])[],
-  >(...lists: Lists): CombinationCaseItem<Lists[number]>[];
+    const Lists extends readonly (readonly unknown[])[],
+  >(...lists: Lists): CombinationListItem<Lists[number]>[];
 }

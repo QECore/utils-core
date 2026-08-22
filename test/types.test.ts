@@ -1,5 +1,6 @@
 import { describe, expectTypeOf, it } from "vitest";
 import { resolve, combinations, combine } from "../src";
+import type { CombinationCase } from "../src/Combinations/types";
 import type { Path, ValueAtPath } from "../src/Resolve/types";
 
 describe("Type Inference and Compile-time Checks", () => {
@@ -296,7 +297,10 @@ describe("Type Inference and Compile-time Checks", () => {
       { browser: ["chrome", "firefox"] },
       { env: ["local", "ci"] },
     ]);
-    expectTypeOf(arrayCases[0]!.data).toMatchTypeOf<unknown[]>();
+    expectTypeOf(arrayCases[0]!.data).toMatchTypeOf<
+      ({ readonly browser: "chrome" | "firefox" } | { readonly env: "local" | "ci" })[]
+    >();
+    expectTypeOf(arrayCases[0]!.data).toBeArray();
   });
 
   it("infers types for combinations and combine with standard interfaces", () => {
@@ -311,12 +315,17 @@ describe("Type Inference and Compile-time Checks", () => {
     };
 
     const cases = combinations(config);
-    expectTypeOf(cases).toMatchTypeOf<unknown[]>();
+    expectTypeOf(cases).toEqualTypeOf<CombinationCase<{ browser: string; version: number }>[]>();
     expectTypeOf(cases[0]!.data.browser).toEqualTypeOf<string>();
     expectTypeOf(cases[0]!.data.version).toEqualTypeOf<number>();
 
     const envs = combinations({ env: ["local", "ci"] });
     const combined = combine(cases, envs);
-    expectTypeOf(combined).toMatchTypeOf<unknown[]>();
+    expectTypeOf(combined).toEqualTypeOf<
+      (
+        | CombinationCase<{ browser: string; version: number }>
+        | CombinationCase<{ readonly env: "local" | "ci" }>
+      )[]
+    >();
   });
 });
