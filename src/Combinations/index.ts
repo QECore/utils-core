@@ -1,5 +1,6 @@
 import type {
   CombinationCase,
+  CombinationCaseItem,
   CombinationOptions,
   CombinationsFunction,
 } from "./types";
@@ -241,12 +242,12 @@ function generateArrayCases<T extends object>(
  * ```
  */
 export function combine<
-  T extends readonly (readonly CombinationCase<any>[])[],
->(...lists: T): T[number][number][] {
-  const result: T[number][number][] = [];
+  const Lists extends readonly (readonly CombinationCase<unknown>[])[],
+>(...lists: Lists): CombinationCaseItem<Lists[number]>[] {
+  const result: CombinationCaseItem<Lists[number]>[] = [];
   for (const list of lists) {
     for (const item of list) {
-      result.push(item);
+      result.push(item as CombinationCaseItem<Lists[number]>);
     }
   }
   return result;

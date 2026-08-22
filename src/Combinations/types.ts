@@ -16,6 +16,38 @@ export type CombinationValue =
   | undefined;
 
 /**
+ * Resolves a single candidate value type from an array of candidates, nested combination object, or scalar.
+ */
+export type ResolvedCombinationValue<V> =
+  V extends readonly (infer Item)[]
+    ? Item
+    : V extends object
+      ? ResolvedCombination<V>
+      : V;
+
+/**
+ * Resolves the generated Cartesian combination payload data shape from an input definition type `T`.
+ *
+ * @example
+ * ```ts
+ * type Def = { browser: ["chrome", "firefox"]; env: ["local", "ci"] };
+ * type Res = ResolvedCombination<Def>;
+ * // { browser: "chrome" | "firefox"; env: "local" | "ci" }
+ * ```
+ */
+export type ResolvedCombination<T extends object> = {
+  [K in keyof T]: ResolvedCombinationValue<T[K]>;
+};
+
+/**
+ * Resolves the individual test case type from a combination collection.
+ */
+export type CombinationCaseItem<T> =
+  T extends readonly (infer Case)[]
+    ? Case
+    : T;
+
+/**
  * Metadata tags generated for a combination test case.
  *
  * @example
@@ -39,7 +71,7 @@ export interface CombinationMetadata {
  *
  * @example
  * ```ts
- * const testCase: CombinationCase<{ browser: string }> = {
+ * const testCase: CombinationCase<{ browser: "chromium" | "firefox" }> = {
  *   data: { browser: "chromium" },
  *   name: "chromium",
  *   metadata: { tags: ["@browser:chromium"] },
@@ -102,10 +134,10 @@ export interface CombinationsFunction {
    * // Produces 4 test cases
    * ```
    */
-  <T extends object>(
+  <const T extends object>(
     input: T,
     options?: CombinationOptions
-  ): CombinationCase<T>[];
+  ): CombinationCase<ResolvedCombination<T>>[];
 
   /**
    * Generates Cartesian combinations where the data payload itself is an array of objects.
@@ -122,10 +154,10 @@ export interface CombinationsFunction {
    * // Each case has data: [{ browser: "..." }, { env: "..." }]
    * ```
    */
-  asArray<T extends object>(
-    input: T[],
+  asArray<const T extends object>(
+    input: readonly T[],
     options?: CombinationOptions
-  ): CombinationCase<T[]>[];
+  ): CombinationCase<ResolvedCombination<T>[]>[];
 
   /**
    * Combines independent combination outputs into one array without Cartesian multiplication.
@@ -141,6 +173,6 @@ export interface CombinationsFunction {
    * ```
    */
   combine<
-    T extends readonly (readonly CombinationCase<any>[])[],
-  >(...lists: T): T[number][number][];
+    const Lists extends readonly (readonly CombinationCase<unknown>[])[],
+  >(...lists: Lists): CombinationCaseItem<Lists[number]>[];
 }

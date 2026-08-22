@@ -249,6 +249,56 @@ describe("Type Inference and Compile-time Checks", () => {
     expectTypeOf(resolver.values()).toEqualTypeOf<Team[]>();
   });
 
+  it("infers exact resolved combination and combine union types", () => {
+    // TEST 1: candidate arrays resolve to union of elements
+    const browserCases = combinations({
+      browser: ["chrome", "firefox"],
+    });
+    expectTypeOf(browserCases[0]!.data.browser).toEqualTypeOf<"chrome" | "firefox">();
+
+    // TEST 2: multi-option combinations infer resolved record
+    const multiCases = combinations({
+      browser: ["chrome", "firefox"],
+      env: ["local", "ci"],
+    });
+    expectTypeOf(multiCases[0]!.data).toMatchTypeOf<{
+      browser: "chrome" | "firefox";
+      env: "local" | "ci";
+    }>();
+    expectTypeOf(multiCases[0]!.data.browser).toEqualTypeOf<"chrome" | "firefox">();
+    expectTypeOf(multiCases[0]!.data.env).toEqualTypeOf<"local" | "ci">();
+
+    // TEST 3: combine preserves union of input cases without merging object shapes
+    const envCases = combinations({
+      env: ["local", "ci"],
+    });
+    const combined = combine(browserCases, envCases);
+    expectTypeOf(combined[0]!).toEqualTypeOf<
+      | (typeof browserCases)[number]
+      | (typeof envCases)[number]
+    >();
+
+    // TEST 4: combinations.combine produces identical type inference
+    const combinedViaMethod = combinations.combine(browserCases, envCases);
+    expectTypeOf(combinedViaMethod).toEqualTypeOf<typeof combined>();
+
+    // TEST 5: object candidates in arrays remain discrete values
+    const userCases = combinations({
+      user: [
+        { role: "admin" },
+        { role: "user" },
+      ],
+    });
+    expectTypeOf(userCases[0]!.data.user.role).toEqualTypeOf<"admin" | "user">();
+
+    // TEST 6: combinations.asArray retains array payload shape
+    const arrayCases = combinations.asArray([
+      { browser: ["chrome", "firefox"] },
+      { env: ["local", "ci"] },
+    ]);
+    expectTypeOf(arrayCases[0]!.data).toMatchTypeOf<unknown[]>();
+  });
+
   it("infers types for combinations and combine with standard interfaces", () => {
     interface BrowserConfig {
       browser: string[];
@@ -261,10 +311,12 @@ describe("Type Inference and Compile-time Checks", () => {
     };
 
     const cases = combinations(config);
-    expectTypeOf(cases).toBeArray();
+    expectTypeOf(cases).toMatchTypeOf<unknown[]>();
+    expectTypeOf(cases[0]!.data.browser).toEqualTypeOf<string>();
+    expectTypeOf(cases[0]!.data.version).toEqualTypeOf<number>();
 
     const envs = combinations({ env: ["local", "ci"] });
     const combined = combine(cases, envs);
-    expectTypeOf(combined).toBeArray();
+    expectTypeOf(combined).toMatchTypeOf<unknown[]>();
   });
 });
