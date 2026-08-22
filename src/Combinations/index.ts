@@ -1,6 +1,5 @@
 import type {
   CombinationCase,
-  CombinationInput,
   CombinationOptions,
   CombinationsFunction,
 } from "./types";
@@ -51,11 +50,11 @@ function valueToString(value: unknown): string {
  * Generates possible candidate values for a payload property.
  *
  * Rules:
- * - Non-array plain objects: recursively resolved as a nested combination space.
+ * - Non-array plain objects: recursively resolved as a nested combination definition.
  * - Non-array scalar/primitive: treated as a single candidate value.
  * - Array: each element is a candidate value directly. Objects inside candidate arrays
  *   are preserved as discrete values and are not recursively expanded.
- * - Empty array []: resolved to [undefined] (property not supplied).
+ * - Empty array []: produces zero candidate values (resulting in zero combinations).
  */
 function resolveValue(value: unknown): unknown[] {
   if (!Array.isArray(value)) {
@@ -66,12 +65,7 @@ function resolveValue(value: unknown): unknown[] {
     return [value];
   }
 
-  // Empty candidate list means "parameter not supplied".
-  if (value.length === 0) {
-    return [undefined];
-  }
-
-  // Candidate array: each element of the array is a candidate value directly.
+  // Candidate array: each element of the array is a discrete candidate value.
   return [...value];
 }
 
@@ -89,6 +83,11 @@ function resolveObject(input: PlainObject): PlainObject[] {
 
   for (const [key, value] of entries) {
     const values = resolveValue(value);
+
+    // If any property has zero candidate values, the Cartesian product is empty.
+    if (values.length === 0) {
+      return [];
+    }
 
     results = results.flatMap((result) =>
       values.map((resolvedValue) => ({
@@ -156,7 +155,7 @@ function createCase<T>(
   };
 }
 
-function generateObjectCases<T extends CombinationInput>(
+function generateObjectCases<T extends object>(
   input: T,
   options: CombinationOptions = {}
 ): CombinationCase<T>[] {
@@ -176,10 +175,10 @@ function generateObjectCases<T extends CombinationInput>(
 }
 
 /**
- * Generates Cartesian combinations where the payload itself is an array of objects.
+ * Generates Cartesian combinations where the data payload itself is an array of objects.
  *
- * @param input Array of combination objects.
- * @param options Optional configuration (e.g. nameSeparator).
+ * @param input Array of combination definition objects.
+ * @param options Configuration options.
  *
  * @example
  * ```ts
@@ -189,7 +188,7 @@ function generateObjectCases<T extends CombinationInput>(
  * ]);
  * ```
  */
-function generateArrayCases<T extends CombinationInput>(
+function generateArrayCases<T extends object>(
   input: T[],
   options: CombinationOptions = {}
 ): CombinationCase<T[]>[] {
@@ -207,6 +206,10 @@ function generateArrayCases<T extends CombinationInput>(
   let payloads: PlainObject[][] = [[]];
 
   for (const elementCombinations of resolvedElements) {
+    if (elementCombinations.length === 0) {
+      return [];
+    }
+
     payloads = payloads.flatMap((current) =>
       elementCombinations.map((element) => [...current, element])
     );
@@ -223,52 +226,46 @@ function generateArrayCases<T extends CombinationInput>(
 }
 
 /**
- * Concatenates multiple combination result arrays into a single collection
- * without re-multiplying them as a Cartesian product.
+ * Combines independent combination outputs into one array.
  *
- * @param lists Combination case lists to combine.
+ * This does not create another Cartesian product.
+ *
+ * @param lists Combination case lists to concatenate.
  *
  * @example
  * ```ts
- * const browsers = combinations({ browser: ["chromium", "firefox"] });
- * const envs = combinations({ env: ["local", "ci"] });
- * const allCases = combine(browsers, envs);
- * // Total 4 test cases
+ * const browsers = combinations({ browser: ["chrome", "firefox"] });
+ * const environments = combinations({ env: ["local", "ci"] });
+ * const allCases = combine(browsers, environments);
+ * // 4 cases total
  * ```
  */
 export function combine<
-  T extends readonly (readonly CombinationCase<object>[])[],
->(...lists: T): T[number][number][] {
-  return lists.flat() as unknown as T[number][number][];
+  const T extends readonly (readonly CombinationCase<unknown>[])[],
+>(...lists: T): Array<T[number][number]> {
+  return lists.flat() as unknown as Array<T[number][number]>;
 }
 
 /**
- * Generates Cartesian product test cases with deterministic naming and metadata tags.
+ * Generates the Cartesian product of the supplied option values.
  *
- * @param input An object with option arrays or an array of option objects.
- * @param options Configuration options (such as custom `nameSeparator`).
+ * @param input Object containing candidate option arrays or scalar values.
+ * @param options Configuration options such as custom `nameSeparator`.
  *
  * @example
  * ```ts
  * const cases = combinations({
- *   browser: ["chromium", "firefox"],
- *   env: ["local", "ci"]
+ *   browser: ["chrome", "firefox"],
+ *   env: ["local", "ci"],
  * });
- * // Produces 4 test cases with name and @tags
  * ```
  */
 export const combinations = Object.assign(
-  function combinations<T extends CombinationInput>(
-    input: T | T[],
+  function combinations<T extends object>(
+    input: T,
     options: CombinationOptions = {}
   ): CombinationCase<T>[] {
-    if (!Array.isArray(input)) {
-      return generateObjectCases(input, options);
-    }
-
-    return input.flatMap((item) =>
-      generateObjectCases(item, options)
-    );
+    return generateObjectCases(input, options);
   },
   {
     asArray: generateArrayCases,

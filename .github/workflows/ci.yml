@@ -44,8 +44,30 @@ jobs:
           mkdir -p .smoke-consumer
           cd .smoke-consumer
           npm init -y
-          npm install ../$TARBALL
-          node -e "const { resolve, combinations, combine } = require('utils-core'); console.log('CJS smoke test passed:', typeof resolve, typeof combinations, typeof combine);"
-          node --input-type=module -e "import { resolve, combinations, combine } from 'utils-core'; console.log('ESM smoke test passed:', typeof resolve, typeof combinations, typeof combine);"
+          npm install ../$TARBALL typescript @types/node
+          node -e "const { resolve, combinations, combine } = require('utils-core'); const res = resolve([10, 20]).sum(); const cases = combinations({ a: [1, 2] }); const all = combine(cases, cases); if (res !== 30 || all.length !== 4) throw new Error('CJS failed'); console.log('CJS smoke test passed');"
+          node --input-type=module -e "import { resolve, combinations, combine } from 'utils-core'; const res = resolve({ users: [{ name: 'Alice' }] }).get('users.name').first(); if (res !== 'Alice') throw new Error('ESM failed'); console.log('ESM smoke test passed');"
+          cat << 'EOF' > tsconfig.json
+          {
+            "compilerOptions": {
+              "target": "ES2022",
+              "moduleResolution": "nodenext",
+              "module": "nodenext",
+              "strict": true,
+              "noEmit": true
+            },
+            "include": ["src"]
+          }
+          EOF
+          mkdir src
+          cat << 'EOF' > src/index.ts
+          import { resolve, combinations, combine } from "utils-core";
+          const data = { users: [{ name: "Alice", age: 30 }] };
+          const names: string[] = resolve(data).get("users.name").values();
+          const first: string | undefined = resolve(data).get("users.name").first();
+          const cases = combinations({ browser: ["chrome", "firefox"] });
+          const all = combine(cases, cases);
+          EOF
+          npx tsc
           cd ..
           rm -rf .smoke-consumer $TARBALL

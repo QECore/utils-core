@@ -93,7 +93,7 @@ resolve(matrix).get("[0]").value(); // [10, 20]
 | Method | Return Type | Description |
 | :--- | :--- | :--- |
 | `.value(index?)` | `T \| undefined` | Returns the resolved value at `index` (defaults to index `0`) |
-| `.first()` | `T \| undefined` | Returns the first resolved value (alias for `.value(0)`) |
+| `.first()` | `T \| undefined` | Returns the first resolved value (implemented via `.value(0)`) |
 | `.last()` | `T \| undefined` | Returns the last resolved value |
 | `.values()` | `T[]` | Returns all resolved values as an array |
 | `.count()` | `number` | Returns the total number of resolved items |
@@ -143,7 +143,7 @@ const adminTeams = resolve(data)
   .where("lead.role:admin")
   .values();
 
-// Filter teams where any member has role "developer"
+// Filter teams where any member has role "developer" (multiple resolved values match if ANY qualifies)
 const devTeams = resolve(data)
   .get("teams")
   .where("members.role:developer")
@@ -211,6 +211,15 @@ const testCases = combinations({
     }
   }
 ]
+```
+
+### Empty Candidate Arrays
+
+An option with zero candidate values produces zero combinations ($N \times 0 = 0$):
+
+```ts
+combinations({ browser: [] }); // []
+combinations({ browser: ["chromium"], env: [] }); // []
 ```
 
 ### Objects Inside Candidate Arrays

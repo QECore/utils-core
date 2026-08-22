@@ -7,8 +7,6 @@ export type CombinationValue =
   | null
   | undefined;
 
-export type CombinationInput = object;
-
 export interface CombinationMetadata {
   tags: string[];
 }
@@ -24,39 +22,70 @@ export interface CombinationOptions {
    * Separator used to generate the automatic testcase name.
    *
    * @default " - "
+   *
+   * @example
+   * ```ts
+   * combinations(
+   *   { browser: ["chromium"], env: ["ci"] },
+   *   { nameSeparator: " | " }
+   * );
+   * ```
    */
   nameSeparator?: string;
 }
 
-export type CombinationObjectResult<T extends CombinationInput> =
-  CombinationCase<T>;
-
-export type CombinationArrayResult<T extends CombinationInput> =
-  CombinationCase<T[]>;
-
 export interface CombinationsFunction {
-  <T extends CombinationInput>(
+  /**
+   * Generates the Cartesian product of the supplied option values.
+   *
+   * @param input Object containing candidate option arrays or scalar values.
+   * @param options Configuration options such as custom `nameSeparator`.
+   *
+   * @example
+   * ```ts
+   * const cases = combinations({
+   *   browser: ["chromium", "firefox"],
+   *   env: ["local", "ci"],
+   * });
+   * ```
+   */
+  <T extends object>(
     input: T,
     options?: CombinationOptions
   ): CombinationCase<T>[];
 
-  <T extends CombinationInput>(
-    input: T[],
-    options?: CombinationOptions
-  ): CombinationCase<T>[];
-
   /**
-   * Generates combinations where the final data itself is an array.
+   * Generates Cartesian combinations where the data payload itself is an array of objects.
+   *
+   * @param input Array of combination definition objects.
+   * @param options Configuration options.
+   *
+   * @example
+   * ```ts
+   * const cases = combinations.asArray([
+   *   { browser: ["chromium", "firefox"] },
+   *   { env: ["local", "ci"] }
+   * ]);
+   * ```
    */
-  asArray<T extends CombinationInput>(
+  asArray<T extends object>(
     input: T[],
     options?: CombinationOptions
   ): CombinationCase<T[]>[];
 
   /**
-   * Combines multiple combination case arrays into a single flattened array.
+   * Combines independent combination outputs into one array without Cartesian multiplication.
+   *
+   * @param lists Combination case lists to concatenate.
+   *
+   * @example
+   * ```ts
+   * const browsers = combinations({ browser: ["chromium", "firefox"] });
+   * const envs = combinations({ env: ["local", "ci"] });
+   * const allCases = combinations.combine(browsers, envs);
+   * ```
    */
-  combine<T extends readonly (readonly CombinationCase<object>[])[]>(
-    ...lists: T
-  ): T[number][number][];
+  combine<
+    const T extends readonly (readonly CombinationCase<unknown>[])[],
+  >(...lists: T): Array<T[number][number]>;
 }

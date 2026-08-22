@@ -198,11 +198,24 @@ describe("resolve", () => {
       expect(resolve(data).get("ids").contains(2)).toEqual([2]);
     });
 
-    it("supports deep path matching in where()", () => {
+    it("supports deep path matching in where() including nested array members where ANY match qualifies", () => {
       const teamsData = {
         teams: [
-          { teamName: "Core", lead: { role: "admin", name: "Alice" } },
-          { teamName: "Ops", lead: { role: "engineer", name: "Bob" } },
+          {
+            teamName: "Core",
+            lead: { role: "admin", name: "Alice" },
+            members: [
+              { name: "John", role: "developer" },
+              { name: "Shan", role: "architect" },
+            ],
+          },
+          {
+            teamName: "Ops",
+            lead: { role: "engineer", name: "Bob" },
+            members: [
+              { name: "Charlie", role: "support" },
+            ],
+          },
         ],
       };
 
@@ -212,6 +225,20 @@ describe("resolve", () => {
         .values();
       expect(adminTeams).toHaveLength(1);
       expect(adminTeams[0]?.teamName).toBe("Core");
+
+      // Nested collection matching: if ANY member matches, the team qualifies
+      const devTeams = resolve(teamsData)
+        .get("teams")
+        .where("members.role:developer")
+        .values();
+      expect(devTeams).toHaveLength(1);
+      expect(devTeams[0]?.teamName).toBe("Core");
+
+      const noMatchTeams = resolve(teamsData)
+        .get("teams")
+        .where("members.role:sales")
+        .values();
+      expect(noMatchTeams).toHaveLength(0);
     });
 
     it("filters with numeric comparisons", () => {
@@ -253,8 +280,11 @@ describe("resolve", () => {
 
       expect(r.value()).toBe(10);
       expect(r.value(0)).toBe(10);
+      expect(r.value(1)).toBe(20);
       expect(r.value(2)).toBe(30);
       expect(r.value(99)).toBeUndefined();
+      // Negative index does not act as last, returns undefined
+      expect(r.value(-1)).toBeUndefined();
 
       expect(r.first()).toBe(10);
       expect(r.last()).toBe(40);

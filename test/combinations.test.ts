@@ -73,39 +73,41 @@ describe("combinations", () => {
       });
     });
 
-    it("handles empty candidate arrays by resolving to undefined", () => {
-      const cases = combinations({
-        browser: ["chromium"],
-        optionalSetting: [],
-      });
-
-      expect(cases).toHaveLength(1);
-      expect(cases[0]?.data).toEqual({
-        browser: "chromium",
-        optionalSetting: undefined,
-      });
+    it("produces zero combinations when an option has an empty candidate array", () => {
+      // Zero candidates for an option means zero combinations for the Cartesian product
+      expect(combinations({ browser: [] })).toEqual([]);
+      expect(combinations({ browser: ["chromium", "firefox"], env: [] })).toEqual([]);
     });
   });
 
   describe("Metadata tag generation", () => {
-    it("generates nested path tags for nested objects", () => {
+    it("generates nested path tags for nested objects and Cartesian-expands them", () => {
       const cases = combinations({
         user: {
           role: ["admin", "member"],
-          active: true,
+          active: [true, false],
         },
         mode: ["standard"],
       });
 
-      expect(cases).toHaveLength(2);
+      // 2 roles * 2 active * 1 mode = 4 combinations
+      expect(cases).toHaveLength(4);
+      expect(cases[0]?.data).toEqual({
+        user: { role: "admin", active: true },
+        mode: "standard",
+      });
       expect(cases[0]?.metadata.tags).toEqual([
         "@user.role:admin",
         "@user.active:true",
         "@mode:standard",
       ]);
-      expect(cases[1]?.metadata.tags).toEqual([
+      expect(cases[3]?.data).toEqual({
+        user: { role: "member", active: false },
+        mode: "standard",
+      });
+      expect(cases[3]?.metadata.tags).toEqual([
         "@user.role:member",
-        "@user.active:true",
+        "@user.active:false",
         "@mode:standard",
       ]);
     });
@@ -133,26 +135,13 @@ describe("combinations", () => {
       expect(cases[3]?.name).toBe("firefox - ci");
     });
 
-    it("returns empty array for combinations.asArray([])", () => {
+    it("returns empty array for combinations.asArray([]) or when an item has 0 candidates", () => {
       expect(combinations.asArray([])).toEqual([]);
+      expect(combinations.asArray([{ browser: ["chromium"] }, { env: [] }])).toEqual([]);
     });
   });
 
-  describe("Multiple combination sets and combine()", () => {
-    it("concatenates independent combination spaces when given an array of objects", () => {
-      const cases = combinations([
-        { browser: ["chromium", "firefox"] },
-        { environment: ["local", "ci"] },
-      ]);
-
-      // 2 browser cases + 2 environment cases = 4 cases in total (concatenated, not multiplied)
-      expect(cases).toHaveLength(4);
-      expect(cases[0]?.data).toEqual({ browser: "chromium" });
-      expect(cases[1]?.data).toEqual({ browser: "firefox" });
-      expect(cases[2]?.data).toEqual({ environment: "local" });
-      expect(cases[3]?.data).toEqual({ environment: "ci" });
-    });
-
+  describe("Candidate objects and combine()", () => {
     it("treats objects inside candidate arrays as discrete values (not recursively Cartesian expanded)", () => {
       const cases = combinations({
         user: [
@@ -164,6 +153,19 @@ describe("combinations", () => {
       expect(cases).toHaveLength(2);
       expect(cases[0]?.data).toEqual({ user: { role: "admin" } });
       expect(cases[1]?.data).toEqual({ user: { role: "user" } });
+    });
+
+    it("combines independent combination sets without Cartesian multiplication", () => {
+      const browsers = combinations({ browser: ["chromium", "firefox"] });
+      const envs = combinations({ env: ["local", "ci"] });
+
+      // 2 browser cases + 2 env cases = 4 total cases (concatenated, NOT 2 * 2 = 4 multiplied)
+      const allCases = combine(browsers, envs);
+      expect(allCases).toHaveLength(4);
+      expect(allCases[0]?.data).toEqual({ browser: "chromium" });
+      expect(allCases[1]?.data).toEqual({ browser: "firefox" });
+      expect(allCases[2]?.data).toEqual({ env: "local" });
+      expect(allCases[3]?.data).toEqual({ env: "ci" });
     });
 
     it("supports combine() with 0, 1, 2, and 3 argument lists", () => {
