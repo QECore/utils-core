@@ -1,17 +1,17 @@
 {
-  "name": "utils-core",
+  "name": "util-core",
   "version": "0.0.1",
   "description": "High-performance TypeScript utility library for type-safe data resolution and Cartesian product test combination generation.",
   "author": "shanmukaanem <shanmukaanem@gmail.com>",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/shanmukaanem/utils-core.git"
+    "url": "git+https://github.com/QECore/util-core.git"
   },
   "bugs": {
-    "url": "https://github.com/shanmukaanem/utils-core/issues"
+    "url": "https://github.com/QECore/util-core/issues"
   },
-  "homepage": "https://github.com/shanmukaanem/utils-core#readme",
+  "homepage": "https://github.com/QECore/util-core#readme",
   "engines": {
     "node": ">=18.0.0"
   },
