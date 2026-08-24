@@ -38,10 +38,15 @@ describe("Built Artifact Smoke Test (Dual ESM & CJS)", () => {
     expect(r.first()).toBe("John");
     expect(r.last()).toBe("Charlie");
 
-    // contains() on strings and arrays
+    // equals() and not.equals(), contains() and not.contains()
+    expect(esmResolve([1, 2, 3]).equals(2)).toEqual([2]);
+    expect(esmResolve([1, 2, 3]).not.equals(2)).toEqual([1, 3]);
     expect(esmResolve("hello world").contains("world")).toEqual(["hello world"]);
+    expect(esmResolve("hello world").not.contains("world")).toEqual([]);
     expect(esmResolve([123, 456]).contains(123)).toEqual([123]);
+    expect(esmResolve([123, 456]).not.contains(123)).toEqual([456]);
     expect(esmResolve([123, 456]).contains(23)).toEqual([]);
+    expect(esmResolve([123, 456]).not.contains(23)).toEqual([123, 456]);
 
     // combinations & combine()
     const browsers = esmCombinations({ browser: ["chromium", "firefox"] });
@@ -68,10 +73,15 @@ describe("Built Artifact Smoke Test (Dual ESM & CJS)", () => {
     expect(r.first()).toBe("John");
     expect(r.last()).toBe("Charlie");
 
-    // contains() on strings and arrays
+    // equals() and not.equals(), contains() and not.contains()
+    expect(cjsResolve([1, 2, 3]).equals(2)).toEqual([2]);
+    expect(cjsResolve([1, 2, 3]).not.equals(2)).toEqual([1, 3]);
     expect(cjsResolve("hello world").contains("world")).toEqual(["hello world"]);
+    expect(cjsResolve("hello world").not.contains("world")).toEqual([]);
     expect(cjsResolve([123, 456]).contains(123)).toEqual([123]);
+    expect(cjsResolve([123, 456]).not.contains(123)).toEqual([456]);
     expect(cjsResolve([123, 456]).contains(23)).toEqual([]);
+    expect(cjsResolve([123, 456]).not.contains(23)).toEqual([123, 456]);
 
     // combinations & combine()
     const browsers = cjsCombinations({ browser: ["chromium", "firefox"] });

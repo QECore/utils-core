@@ -83,21 +83,39 @@ describe("Type Inference and Compile-time Checks", () => {
     expectTypeOf<MemberNameVal>().toEqualTypeOf<string>();
   });
 
-  it("enforces strict type safety for equals and notEquals", () => {
+  it("enforces strict type safety for positive and negated predicates", () => {
     const data = {
       age: 30,
       name: "John",
       active: true,
+      roles: ["admin", "user"],
+      ids: [1, 2, 3],
     };
 
-    // Valid comparisons
+    // Valid positive and negated comparisons
     resolve(data).get("age").equals(30);
     resolve(data).get("name").equals("John");
     resolve(data).get("active").equals(true);
 
-    resolve(data).get("age").notEquals(30);
-    resolve(data).get("name").notEquals("John");
-    resolve(data).get("active").notEquals(true);
+    resolve(data).get("age").not.equals(30);
+    resolve(data).get("name").not.equals("John");
+    resolve(data).get("active").not.equals(true);
+
+    resolve(data).get("roles").contains("admin");
+    resolve(data).get("roles").not.contains("admin");
+    resolve(data).get("ids").contains(2);
+    resolve(data).get("ids").not.contains(2);
+
+    resolve(data).get("name").startsWith("J");
+    resolve(data).get("name").not.startsWith("J");
+    resolve(data).get("name").endsWith("n");
+    resolve(data).get("name").not.endsWith("n");
+
+    resolve(data).get("age").greaterThan(20);
+    resolve(data).get("age").not.greaterThan(20);
+
+    // Verify notEquals is absent from the API
+    expectTypeOf(resolve(data).get("age")).not.toHaveProperty("notEquals");
 
     // Invalid comparisons should fail at compile time
     // @ts-expect-error type mismatch: number vs string
@@ -110,27 +128,22 @@ describe("Type Inference and Compile-time Checks", () => {
     resolve(data).get("active").equals("true");
 
     // @ts-expect-error type mismatch: number vs string
-    resolve(data).get("age").notEquals("30");
+    resolve(data).get("age").not.equals("30");
 
     // @ts-expect-error type mismatch: string vs number
-    resolve(data).get("name").notEquals(30);
+    resolve(data).get("name").not.equals(30);
 
     // @ts-expect-error type mismatch: boolean vs string
-    resolve(data).get("active").notEquals("true");
-  });
-
-  it("enforces type safety for contains() and sum()", () => {
-    const data = {
-      roles: ["admin", "user"],
-      ids: [1, 2, 3],
-    };
-
-    resolve(data).get("roles").contains("admin");
-    resolve(data).get("ids").contains(2);
+    resolve(data).get("active").not.equals("true");
 
     // @ts-expect-error type mismatch: number[] does not contain string
     resolve(data).get("ids").contains("invalid");
 
+    // @ts-expect-error type mismatch: number[] does not contain string
+    resolve(data).get("ids").not.contains("invalid");
+  });
+
+  it("enforces type safety for sum()", () => {
     const numSum = resolve([1, 2, 3]).sum();
     expectTypeOf(numSum).toEqualTypeOf<number>();
 

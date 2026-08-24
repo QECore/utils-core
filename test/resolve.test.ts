@@ -169,33 +169,64 @@ describe("resolve", () => {
       expect(superadmins[0]?.name).toBe("Root");
     });
 
-    it("filters with equals and notEquals", () => {
+    it("filters with equals and .not.equals", () => {
       const ages = resolve(dataset).get("users.age");
       expect(ages.equals(35)).toEqual([35]);
-      expect(ages.notEquals(35)).toEqual([22, 40, 19]);
+      expect(ages.not.equals(35)).toEqual([22, 40, 19]);
+
+      expect(resolve([1, 2, 3]).equals(2)).toEqual([2]);
+      expect(resolve([1, 2, 3]).not.equals(2)).toEqual([1, 3]);
     });
 
-    it("filters with contains, startsWith, and endsWith", () => {
+    it("ensures .not is stateless and does not mutate resolver instance", () => {
+      const resolver = resolve([1, 2, 3]);
+
+      expect(resolver.not.equals(2)).toEqual([1, 3]);
+      expect(resolver.equals(2)).toEqual([2]);
+      expect(resolver.not.equals(1)).toEqual([2, 3]);
+      expect(resolver.values()).toEqual([1, 2, 3]);
+    });
+
+    it("filters with contains, startsWith, endsWith and their .not counterparts", () => {
       const names = resolve(dataset).get("users.name");
       expect(names.contains("li")).toEqual(["Alice", "Charlie"]);
+      expect(names.not.contains("li")).toEqual(["Bob", "Danielle"]);
+
       expect(names.startsWith("Dan")).toEqual(["Danielle"]);
+      expect(names.not.startsWith("Dan")).toEqual(["Alice", "Bob", "Charlie"]);
+
       expect(names.endsWith("ie")).toEqual(["Charlie"]);
+      expect(names.not.endsWith("ie")).toEqual(["Alice", "Bob", "Danielle"]);
+
       expect(names.endsWith("le")).toEqual(["Danielle"]);
+      expect(names.not.endsWith("le")).toEqual(["Alice", "Bob", "Charlie"]);
+
+      const fruits = ["apple", "banana", "apricot"];
+      expect(resolve(fruits).startsWith("app")).toEqual(["apple"]);
+      expect(resolve(fruits).not.startsWith("app")).toEqual(["banana", "apricot"]);
+      expect(resolve(fruits).endsWith("le")).toEqual(["apple"]);
+      expect(resolve(fruits).not.endsWith("le")).toEqual(["banana", "apricot"]);
     });
 
-    it("uses array membership semantics for contains() on arrays", () => {
+    it("uses array membership semantics for contains() and .not.contains() on arrays", () => {
       const roles = ["admin", "user"];
       expect(resolve(roles).contains("admin")).toEqual(["admin"]);
+      expect(resolve(roles).not.contains("admin")).toEqual(["user"]);
       expect(resolve(roles).contains("guest")).toEqual([]);
+      expect(resolve(roles).not.contains("guest")).toEqual(["admin", "user"]);
 
       const numbers = [123, 456];
       // 23 is NOT an element in [123, 456], even though it is a substring of 123
       expect(resolve(numbers).contains(23)).toEqual([]);
+      expect(resolve(numbers).not.contains(23)).toEqual([123, 456]);
       expect(resolve(numbers).contains(123)).toEqual([123]);
+      expect(resolve(numbers).not.contains(123)).toEqual([456]);
 
       const data = { roles: ["admin", "user"], ids: [1, 2, 3] };
       expect(resolve(data).get("roles").contains("admin")).toEqual(["admin"]);
+      expect(resolve(data).get("roles").not.contains("admin")).toEqual(["user"]);
       expect(resolve(data).get("ids").contains(2)).toEqual([2]);
+      expect(resolve(data).get("ids").not.contains(2)).toEqual([1, 3]);
     });
 
     it("supports deep path matching in where() including nested array members where ANY match qualifies", () => {
@@ -241,22 +272,67 @@ describe("resolve", () => {
       expect(noMatchTeams).toHaveLength(0);
     });
 
-    it("filters with numeric comparisons", () => {
+    it("filters with numeric comparisons and their .not counterparts", () => {
       const ages = resolve(dataset).get("users.age");
       expect(ages.greaterThan(30)).toEqual([35, 40]);
+      expect(ages.not.greaterThan(30)).toEqual([22, 19]);
+
       expect(ages.greaterThanOrEqual(35)).toEqual([35, 40]);
+      expect(ages.not.greaterThanOrEqual(35)).toEqual([22, 19]);
+
       expect(ages.lessThan(25)).toEqual([22, 19]);
+      expect(ages.not.lessThan(25)).toEqual([35, 40]);
+
       expect(ages.lessThanOrEqual(22)).toEqual([22, 19]);
+      expect(ages.not.lessThanOrEqual(22)).toEqual([35, 40]);
+
+      const testNums = [10, 20, 30];
+      expect(resolve(testNums).greaterThan(20)).toEqual([30]);
+      expect(resolve(testNums).not.greaterThan(20)).toEqual([10, 20]);
+      expect(resolve(testNums).greaterThanOrEqual(20)).toEqual([20, 30]);
+      expect(resolve(testNums).not.greaterThanOrEqual(20)).toEqual([10]);
+      expect(resolve(testNums).lessThan(20)).toEqual([10]);
+      expect(resolve(testNums).not.lessThan(20)).toEqual([20, 30]);
+      expect(resolve(testNums).lessThanOrEqual(20)).toEqual([10, 20]);
+      expect(resolve(testNums).not.lessThanOrEqual(20)).toEqual([30]);
     });
 
-    it("filters with null/undefined/truthy/falsy checks", () => {
+    it("filters with null/undefined/truthy/falsy checks and their .not counterparts", () => {
       const items = {
         data: [null, undefined, 0, false, "", "text", 42, true],
       };
 
       expect(resolve(items).get("data").isNull()).toEqual([null]);
+      expect(resolve(items).get("data").not.isNull()).toEqual([
+        undefined,
+        0,
+        false,
+        "",
+        "text",
+        42,
+        true,
+      ]);
+
       expect(resolve(items).get("data").isUndefined()).toEqual([undefined]);
+      expect(resolve(items).get("data").not.isUndefined()).toEqual([
+        null,
+        0,
+        false,
+        "",
+        "text",
+        42,
+        true,
+      ]);
+
       expect(resolve(items).get("data").isTruthy()).toEqual(["text", 42, true]);
+      expect(resolve(items).get("data").not.isTruthy()).toEqual([
+        null,
+        undefined,
+        0,
+        false,
+        "",
+      ]);
+
       expect(resolve(items).get("data").isFalsy()).toEqual([
         null,
         undefined,
@@ -264,12 +340,20 @@ describe("resolve", () => {
         false,
         "",
       ]);
+      expect(resolve(items).get("data").not.isFalsy()).toEqual(["text", 42, true]);
     });
 
-    it("filters with regex matches", () => {
+    it("filters with regex matches and .not.matches", () => {
       const names = resolve(dataset).get("users.name");
       expect(names.matches(/^C/)).toEqual(["Charlie"]);
+      expect(names.not.matches(/^C/)).toEqual(["Alice", "Bob", "Danielle"]);
+
       expect(names.matches(/e$/)).toEqual(["Alice", "Charlie", "Danielle"]);
+      expect(names.not.matches(/e$/)).toEqual(["Bob"]);
+
+      const list = ["Alice", "Bob", "Adam"];
+      expect(resolve(list).matches(/^A/)).toEqual(["Alice", "Adam"]);
+      expect(resolve(list).not.matches(/^A/)).toEqual(["Bob"]);
     });
   });
 
@@ -417,7 +501,9 @@ describe("resolve", () => {
 
       const dates = [d1, d2, d3];
       expect(resolve(dates).greaterThan(new Date("2025-03-01T00:00:00.000Z"))).toEqual([d2, d3]);
+      expect(resolve(dates).not.greaterThan(new Date("2025-03-01T00:00:00.000Z"))).toEqual([d1]);
       expect(resolve(dates).equals(new Date("2025-01-01T00:00:00.000Z"))).toEqual([d1]);
+      expect(resolve(dates).not.equals(new Date("2025-01-01T00:00:00.000Z"))).toEqual([d2, d3]);
     });
   });
 });
