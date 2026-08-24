@@ -169,22 +169,30 @@ describe("resolve", () => {
       expect(superadmins[0]?.name).toBe("Root");
     });
 
-    it("filters with equals and .not.equals", () => {
+    it("filters with equals, .not.equals, and double negation .not.not.equals", () => {
       const ages = resolve(dataset).get("users.age");
       expect(ages.equals(35)).toEqual([35]);
       expect(ages.not.equals(35)).toEqual([22, 40, 19]);
+      expect(ages.not.not.equals(35)).toEqual([35]);
 
       expect(resolve([1, 2, 3]).equals(2)).toEqual([2]);
       expect(resolve([1, 2, 3]).not.equals(2)).toEqual([1, 3]);
+      expect(resolve([1, 2, 3]).not.not.equals(2)).toEqual([2]);
     });
 
-    it("ensures .not is stateless and does not mutate resolver instance", () => {
+    it("ensures .not is stateless, immutable, and supports independent chains", () => {
       const resolver = resolve([1, 2, 3]);
 
+      expect(resolver.equals(2)).toEqual([2]);
       expect(resolver.not.equals(2)).toEqual([1, 3]);
+      expect(resolver.not.not.equals(2)).toEqual([2]);
       expect(resolver.equals(2)).toEqual([2]);
       expect(resolver.not.equals(1)).toEqual([2, 3]);
       expect(resolver.values()).toEqual([1, 2, 3]);
+
+      const negative = resolver.not;
+      expect(negative.equals(2)).toEqual([1, 3]);
+      expect(resolver.equals(2)).toEqual([2]);
     });
 
     it("filters with contains, startsWith, endsWith and their .not counterparts", () => {

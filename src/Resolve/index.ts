@@ -3,7 +3,6 @@ import type {
   Comparable,
   ContainsTarget,
   Matcher,
-  NegatedPredicates,
   Path,
   ResolvedItem,
   SumResult,
@@ -31,214 +30,23 @@ type Operation =
     };
 
 /* ============================================================
- * RESOLVE CLASS
+ * PREDICATE CHAIN CLASS
  * ========================================================== */
 
-export class Resolve<T> {
-  private constructor(
-    private readonly source: T,
-    private readonly operations: readonly Operation[] = []
-  ) {}
+/**
+ * Provides type-safe predicate operations for resolved values.
+ */
+export class PredicateChain<T> {
+  protected readonly resolverInstance: Resolve<T>;
+  protected readonly negated: boolean;
 
-  /* ==========================================================
-   * FACTORY
-   * ======================================================== */
-
-  /**
-   * Creates a new Resolve instance for querying and transforming data.
-   *
-   * @param source The input data structure to resolve.
-   *
-   * @example
-   * ```ts
-   * const resolver = Resolve.from({ users: [{ name: "Alice" }] });
-   * ```
-   */
-  static from<T>(source: T): Resolve<T> {
-    return new Resolve(source);
-  }
-
-  /* ==========================================================
-   * GET
-   * ======================================================== */
-
-  /**
-   * Traverses a property or nested path with compile-time type safety.
-   *
-   * @param path A valid dot-notated or indexed property path.
-   *
-   * @example
-   * ```ts
-   * resolve(data).get("teams.members.name").values();
-   * // ["Alice", "Bob"]
-   * ```
-   */
-  get<P extends Path<T>>(
-    path: P
-  ): Resolve<ValueAtPath<T, P>> {
-    return new Resolve(this.source as unknown as ValueAtPath<T, P>, [
-      ...this.operations,
-      {
-        type: "path",
-        value: path,
-      },
-    ]);
-  }
-
-  /* ==========================================================
-   * WHERE
-   * ======================================================== */
-
-  /**
-   * Filters resolved collection items using a path matcher expression.
-   * Evaluates the path on each collection item and performs case-insensitive substring matching.
-   *
-   * @param matcher Path matcher formatted as `"path:expected"` (e.g. `"role:admin"` or `"lead.role:admin"`).
-   *
-   * @example
-   * ```ts
-   * resolve(data).get("teams").where("lead.role:admin").values();
-   * // [{ name: "Platform", lead: { role: "admin" } }]
-   * ```
-   */
-  where(matcher: Matcher<T>): Resolve<T> {
-    return new Resolve(this.source, [
-      ...this.operations,
-      {
-        type: "where",
-        value: matcher,
-      },
-    ]);
-  }
-
-  /* ==========================================================
-   * AT
-   * ======================================================== */
-
-  /**
-   * Adds an index-selection stage to the resolver pipeline.
-   *
-   * @param index 0-based index to select from the current pipeline collection.
-   *
-   * @example
-   * ```ts
-   * resolve(users).at(0).get("name").value();
-   * // "Alice"
-   * ```
-   */
-  at(
-    index: number
-  ): Resolve<ArrayItem<T> extends never ? T : ArrayItem<T>> {
-    return new Resolve(this.source, [
-      ...this.operations,
-      {
-        type: "index",
-        value: index,
-      },
-    ]) as Resolve<ArrayItem<T> extends never ? T : ArrayItem<T>>;
-  }
-
-  /* ==========================================================
-   * TERMINAL METHODS
-   * ======================================================== */
-
-  /**
-   * Executes the pipeline and returns all resolved values as an array.
-   *
-   * @example
-   * ```ts
-   * resolve([10, 20, 30]).values();
-   * // [10, 20, 30]
-   * ```
-   */
-  values(): ResolvedItem<T>[] {
-    return this.execute() as ResolvedItem<T>[];
+  constructor(resolver?: Resolve<T>, negated = false) {
+    this.resolverInstance = resolver ?? (this as unknown as Resolve<T>);
+    this.negated = negated;
   }
 
   /**
-   * Executes the pipeline and returns the resolved value at the specified index.
-   * Defaults to index 0 (the first resolved value).
-   *
-   * @param index 0-based index of the resolved item (defaults to 0).
-   *
-   * @example
-   * ```ts
-   * resolve([10, 20, 30]).value();
-   * // 10
-   *
-   * resolve([10, 20, 30]).value(1);
-   * // 20
-   * ```
-   */
-  value(index = 0): ResolvedItem<T> | undefined {
-    const results = this.execute();
-    if (index >= 0 && index < results.length) {
-      return results[index] as ResolvedItem<T>;
-    }
-    return undefined;
-  }
-
-  /**
-   * Returns the first resolved value.
-   *
-   * @example
-   * ```ts
-   * resolve([10, 20, 30]).first();
-   * // 10
-   * ```
-   */
-  first(): ResolvedItem<T> | undefined {
-    return this.value(0);
-  }
-
-  /**
-   * Returns the last resolved value.
-   *
-   * @example
-   * ```ts
-   * resolve([10, 20, 30]).last();
-   * // 30
-   * ```
-   */
-  last(): ResolvedItem<T> | undefined {
-    const results = this.execute();
-    return results.length > 0
-      ? (results[results.length - 1] as ResolvedItem<T>)
-      : undefined;
-  }
-
-  /**
-   * Returns the total count of resolved items.
-   *
-   * @example
-   * ```ts
-   * resolve([10, 20, 30]).count();
-   * // 3
-   * ```
-   */
-  count(): number {
-    return this.execute().length;
-  }
-
-  /**
-   * Returns true if at least one value was resolved.
-   *
-   * @example
-   * ```ts
-   * resolve([10]).exists();
-   * // true
-   * ```
-   */
-  exists(): boolean {
-    return this.execute().length > 0;
-  }
-
-  /* ==========================================================
-   * PREDICATES & FILTERING
-   * ======================================================== */
-
-  /**
-   * Provides negated versions of Resolve predicate methods without mutating the resolver.
+   * Returns a predicate chain with inverted predicate semantics.
    *
    * @example
    * ```ts
@@ -246,31 +54,8 @@ export class Resolve<T> {
    * resolve(roles).not.contains("admin");
    * ```
    */
-  get not(): NegatedPredicates<T> {
-    return {
-      equals: (expected: ResolvedItem<T>) =>
-        this.filter(Resolve.equalsPredicate(expected), true),
-      contains: (expected: ContainsTarget<T>) =>
-        this.filter(Resolve.containsPredicate(expected), true),
-      startsWith: (expected: string) =>
-        this.filter(Resolve.startsWithPredicate(expected), true),
-      endsWith: (expected: string) =>
-        this.filter(Resolve.endsWithPredicate(expected), true),
-      greaterThan: (expected: Comparable) =>
-        this.filter(Resolve.greaterThanPredicate(expected), true),
-      greaterThanOrEqual: (expected: Comparable) =>
-        this.filter(Resolve.greaterThanOrEqualPredicate(expected), true),
-      lessThan: (expected: Comparable) =>
-        this.filter(Resolve.lessThanPredicate(expected), true),
-      lessThanOrEqual: (expected: Comparable) =>
-        this.filter(Resolve.lessThanOrEqualPredicate(expected), true),
-      isNull: () => this.filter(Resolve.isNullPredicate, true),
-      isUndefined: () => this.filter(Resolve.isUndefinedPredicate, true),
-      isTruthy: () => this.filter(Resolve.isTruthyPredicate, true),
-      isFalsy: () => this.filter(Resolve.isFalsyPredicate, true),
-      matches: (regex: RegExp) =>
-        this.filter(Resolve.matchesPredicate(regex), true),
-    };
+  get not(): PredicateChain<T> {
+    return new PredicateChain(this.resolverInstance, !this.negated);
   }
 
   /**
@@ -464,11 +249,203 @@ export class Resolve<T> {
     return this.filter(Resolve.matchesPredicate(regex));
   }
 
+  protected filter(predicate: (value: unknown) => boolean): ResolvedItem<T>[] {
+    return this.resolverInstance.filter(predicate, this.negated);
+  }
+}
+
+/* ============================================================
+ * RESOLVE CLASS
+ * ========================================================== */
+
+export class Resolve<T> extends PredicateChain<T> {
+  private constructor(
+    private readonly source: T,
+    private readonly operations: readonly Operation[] = []
+  ) {
+    super();
+  }
+
+  /**
+   * Internal factory for constructing chained Resolve instances.
+   */
+  private static create<T>(
+    source: T,
+    operations: readonly Operation[] = []
+  ): Resolve<T> {
+    return new Resolve<T>(source, operations);
+  }
+
+  /**
+   * Creates a root resolver instance for deep querying and filtering.
+   *
+   * @param source Data source (object, array, primitive).
+   *
+   * @example
+   * ```ts
+   * const r = resolve(data);
+   * ```
+   */
+  static from<T>(source: T): Resolve<T> {
+    return Resolve.create(source);
+  }
+
+  /* ==========================================================
+   * PIPELINE / NAVIGATION
+   * ======================================================== */
+
+  /**
+   * Traverses a deep property path, automatically flattening one level of array boundaries.
+   *
+   * @param path Dot-delimited property path or index bracket notation.
+   *
+   * @example
+   * ```ts
+   * resolve(users).get("teams.members.name");
+   * ```
+   */
+  get<P extends Path<T>>(
+    path: P
+  ): Resolve<ValueAtPath<T, P>> {
+    return Resolve.create(this.source as any, [
+      ...this.operations,
+      { type: "path", value: path },
+    ]);
+  }
+
+  /**
+   * Navigates to a specific zero-based index in the current resolved array.
+   * Keeps the pipeline active for subsequent chaining.
+   *
+   * @param index Zero-based element position.
+   *
+   * @example
+   * ```ts
+   * resolve(users).at(0).get("name").value();
+   * ```
+   */
+  at(
+    index: number
+  ): Resolve<ArrayItem<T> extends never ? T : ArrayItem<T>> {
+    return Resolve.create(this.source as any, [
+      ...this.operations,
+      { type: "index", value: index },
+    ]) as Resolve<ArrayItem<T> extends never ? T : ArrayItem<T>>;
+  }
+
+  /**
+   * Filters the collection by matching elements against a `"path:expected"` expression.
+   * If the path resolves to an array, the item matches if ANY nested value satisfies the condition.
+   *
+   * @param expression Filter expression in `"path:expected"` format.
+   *
+   * @example
+   * ```ts
+   * resolve(teams).where("lead.role:admin");
+   * resolve(teams).where("members.role:developer");
+   * ```
+   */
+  where(expression: Matcher<T>): Resolve<T> {
+    return Resolve.create(this.source, [
+      ...this.operations,
+      { type: "where", value: expression },
+    ]);
+  }
+
+  /* ==========================================================
+   * TERMINAL ACCESSORS
+   * ======================================================== */
+
+  /**
+   * Executes the pipeline and returns the value at the specified index, or the first value.
+   * Returns `undefined` if no value exists at the index.
+   *
+   * @param index Optional zero-based element position (defaults to 0).
+   *
+   * @example
+   * ```ts
+   * resolve(user).get("name").value(); // "Shan"
+   * resolve(users).get("name").value(1); // "John"
+   * ```
+   */
+  value(index = 0): ResolvedItem<T> | undefined {
+    const results = this.execute();
+    if (index >= 0 && index < results.length) {
+      return results[index] as ResolvedItem<T>;
+    }
+    return undefined;
+  }
+
+  /**
+   * Returns the first resolved value, or `undefined` if the result set is empty.
+   *
+   * @example
+   * ```ts
+   * resolve(users).get("name").first();
+   * ```
+   */
+  first(): ResolvedItem<T> | undefined {
+    return this.value(0);
+  }
+
+  /**
+   * Returns the last resolved value, or `undefined` if the result set is empty.
+   *
+   * @example
+   * ```ts
+   * resolve(users).get("name").last();
+   * ```
+   */
+  last(): ResolvedItem<T> | undefined {
+    const values = this.execute();
+    return values.length > 0 ? (values[values.length - 1] as ResolvedItem<T>) : undefined;
+  }
+
+  /**
+   * Executes the resolution pipeline and returns all matching resolved values as an array.
+   *
+   * @example
+   * ```ts
+   * resolve(users).get("name").values();
+   * // ["Alice", "Bob"]
+   * ```
+   */
+  values(): ResolvedItem<T>[] {
+    return this.execute() as ResolvedItem<T>[];
+  }
+
+  /**
+   * Returns the number of resolved elements.
+   *
+   * @example
+   * ```ts
+   * resolve(users).get("name").count(); // 2
+   * ```
+   */
+  count(): number {
+    return this.execute().length;
+  }
+
+  /**
+   * Checks whether any resolved elements exist.
+   *
+   * @example
+   * ```ts
+   * resolve(users).get("name").exists(); // true
+   * ```
+   */
+  exists(): boolean {
+    return this.execute().length > 0;
+  }
+
   /* ==========================================================
    * FILTER ENGINE & PREDICATE LOGIC
    * ======================================================== */
 
-  private filter(
+  /**
+   * Executes pipeline filtering with optional negation inversion.
+   */
+  filter(
     predicate: (value: unknown) => boolean,
     negate = false
   ): ResolvedItem<T>[] {
@@ -477,18 +454,18 @@ export class Resolve<T> {
     ) as ResolvedItem<T>[];
   }
 
-  private static isEqual(value: unknown, expected: unknown): boolean {
+  static isEqual(value: unknown, expected: unknown): boolean {
     if (value instanceof Date && expected instanceof Date) {
       return value.getTime() === expected.getTime();
     }
     return value === expected;
   }
 
-  private static equalsPredicate(expected: unknown) {
+  static equalsPredicate(expected: unknown) {
     return (value: unknown): boolean => Resolve.isEqual(value, expected);
   }
 
-  private static containsPredicate(expected: unknown) {
+  static containsPredicate(expected: unknown) {
     const isExpectedString = typeof expected === "string";
     const needle = isExpectedString
       ? (expected as string).toLowerCase()
@@ -511,61 +488,61 @@ export class Resolve<T> {
     };
   }
 
-  private static startsWithPredicate(expected: string) {
+  static startsWithPredicate(expected: string) {
     return (value: unknown): boolean =>
       typeof value === "string" && value.startsWith(expected);
   }
 
-  private static endsWithPredicate(expected: string) {
+  static endsWithPredicate(expected: string) {
     return (value: unknown): boolean =>
       typeof value === "string" && value.endsWith(expected);
   }
 
-  private static greaterThanPredicate(expected: Comparable) {
+  static greaterThanPredicate(expected: Comparable) {
     return (value: unknown): boolean => {
       const diff = Resolve.compare(value, expected);
       return diff !== null && diff > 0;
     };
   }
 
-  private static greaterThanOrEqualPredicate(expected: Comparable) {
+  static greaterThanOrEqualPredicate(expected: Comparable) {
     return (value: unknown): boolean => {
       const diff = Resolve.compare(value, expected);
       return diff !== null && diff >= 0;
     };
   }
 
-  private static lessThanPredicate(expected: Comparable) {
+  static lessThanPredicate(expected: Comparable) {
     return (value: unknown): boolean => {
       const diff = Resolve.compare(value, expected);
       return diff !== null && diff < 0;
     };
   }
 
-  private static lessThanOrEqualPredicate(expected: Comparable) {
+  static lessThanOrEqualPredicate(expected: Comparable) {
     return (value: unknown): boolean => {
       const diff = Resolve.compare(value, expected);
       return diff !== null && diff <= 0;
     };
   }
 
-  private static isNullPredicate(value: unknown): boolean {
+  static isNullPredicate(value: unknown): boolean {
     return value === null;
   }
 
-  private static isUndefinedPredicate(value: unknown): boolean {
+  static isUndefinedPredicate(value: unknown): boolean {
     return value === undefined;
   }
 
-  private static isTruthyPredicate(value: unknown): boolean {
+  static isTruthyPredicate(value: unknown): boolean {
     return Boolean(value);
   }
 
-  private static isFalsyPredicate(value: unknown): boolean {
+  static isFalsyPredicate(value: unknown): boolean {
     return !value;
   }
 
-  private static matchesPredicate(regex: RegExp) {
+  static matchesPredicate(regex: RegExp) {
     const cleanRegex =
       regex.global || regex.sticky
         ? new RegExp(regex.source, regex.flags.replace(/[gy]/g, ""))
