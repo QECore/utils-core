@@ -1,6 +1,6 @@
 {
   "name": "ts-lib-core",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "High-performance TypeScript utility library for type-safe data resolution and Cartesian product test combination generation.",
   "author": "shanmukaanem <shanmukaanem@gmail.com>",
   "license": "MIT",
