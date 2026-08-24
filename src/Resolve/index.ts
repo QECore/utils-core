@@ -30,23 +30,39 @@ type Operation =
     };
 
 /* ============================================================
- * PREDICATE CHAIN CLASS
+ * PREDICATE SOURCE CONTRACT (INTERNAL)
  * ========================================================== */
+
+/**
+ * Internal contract supplying raw predicate filtering execution to PredicateChain.
+ */
+interface PredicateSource<T> {
+  filter(
+    predicate: (value: unknown) => boolean,
+    negate: boolean
+  ): ResolvedItem<T>[];
+}
+
+/* ============================================================
+ * PREDICATE CHAIN CLASS & TYPES
+ * ========================================================== */
+
+/**
+ * View of predicate methods in the negated namespace (does not expose another `.not`).
+ */
+type NegatedPredicateChain<T> = Omit<PredicateChain<T>, "not">;
 
 /**
  * Provides type-safe predicate operations for resolved values.
  */
 export class PredicateChain<T> {
-  protected readonly resolverInstance: Resolve<T>;
-  protected readonly negated: boolean;
-
-  constructor(resolver?: Resolve<T>, negated = false) {
-    this.resolverInstance = resolver ?? (this as unknown as Resolve<T>);
-    this.negated = negated;
-  }
+  constructor(
+    private readonly source: PredicateSource<T>,
+    private readonly negated = false
+  ) {}
 
   /**
-   * Returns a predicate chain with inverted predicate semantics.
+   * Enters the negative predicate namespace without mutating the resolver.
    *
    * @example
    * ```ts
@@ -54,8 +70,8 @@ export class PredicateChain<T> {
    * resolve(roles).not.contains("admin");
    * ```
    */
-  get not(): PredicateChain<T> {
-    return new PredicateChain(this.resolverInstance, !this.negated);
+  get not(): NegatedPredicateChain<T> {
+    return new PredicateChain(this.source, true);
   }
 
   /**
@@ -71,7 +87,10 @@ export class PredicateChain<T> {
    * ```
    */
   equals(expected: ResolvedItem<T>): ResolvedItem<T>[] {
-    return this.filter(Resolve.equalsPredicate(expected));
+    return this.source.filter(
+      PredicateChain.equalsPredicate(expected),
+      this.negated
+    );
   }
 
   /**
@@ -88,7 +107,10 @@ export class PredicateChain<T> {
    * ```
    */
   contains(expected: ContainsTarget<T>): ResolvedItem<T>[] {
-    return this.filter(Resolve.containsPredicate(expected));
+    return this.source.filter(
+      PredicateChain.containsPredicate(expected),
+      this.negated
+    );
   }
 
   /**
@@ -103,7 +125,10 @@ export class PredicateChain<T> {
    * ```
    */
   startsWith(expected: string): ResolvedItem<T>[] {
-    return this.filter(Resolve.startsWithPredicate(expected));
+    return this.source.filter(
+      PredicateChain.startsWithPredicate(expected),
+      this.negated
+    );
   }
 
   /**
@@ -118,7 +143,10 @@ export class PredicateChain<T> {
    * ```
    */
   endsWith(expected: string): ResolvedItem<T>[] {
-    return this.filter(Resolve.endsWithPredicate(expected));
+    return this.source.filter(
+      PredicateChain.endsWithPredicate(expected),
+      this.negated
+    );
   }
 
   /**
@@ -133,7 +161,10 @@ export class PredicateChain<T> {
    * ```
    */
   greaterThan(expected: Comparable): ResolvedItem<T>[] {
-    return this.filter(Resolve.greaterThanPredicate(expected));
+    return this.source.filter(
+      PredicateChain.greaterThanPredicate(expected),
+      this.negated
+    );
   }
 
   /**
@@ -148,7 +179,10 @@ export class PredicateChain<T> {
    * ```
    */
   greaterThanOrEqual(expected: Comparable): ResolvedItem<T>[] {
-    return this.filter(Resolve.greaterThanOrEqualPredicate(expected));
+    return this.source.filter(
+      PredicateChain.greaterThanOrEqualPredicate(expected),
+      this.negated
+    );
   }
 
   /**
@@ -163,7 +197,10 @@ export class PredicateChain<T> {
    * ```
    */
   lessThan(expected: Comparable): ResolvedItem<T>[] {
-    return this.filter(Resolve.lessThanPredicate(expected));
+    return this.source.filter(
+      PredicateChain.lessThanPredicate(expected),
+      this.negated
+    );
   }
 
   /**
@@ -178,7 +215,10 @@ export class PredicateChain<T> {
    * ```
    */
   lessThanOrEqual(expected: Comparable): ResolvedItem<T>[] {
-    return this.filter(Resolve.lessThanOrEqualPredicate(expected));
+    return this.source.filter(
+      PredicateChain.lessThanOrEqualPredicate(expected),
+      this.negated
+    );
   }
 
   /**
@@ -191,7 +231,10 @@ export class PredicateChain<T> {
    * ```
    */
   isNull(): ResolvedItem<T>[] {
-    return this.filter(Resolve.isNullPredicate);
+    return this.source.filter(
+      PredicateChain.isNullPredicate,
+      this.negated
+    );
   }
 
   /**
@@ -204,7 +247,10 @@ export class PredicateChain<T> {
    * ```
    */
   isUndefined(): ResolvedItem<T>[] {
-    return this.filter(Resolve.isUndefinedPredicate);
+    return this.source.filter(
+      PredicateChain.isUndefinedPredicate,
+      this.negated
+    );
   }
 
   /**
@@ -217,7 +263,10 @@ export class PredicateChain<T> {
    * ```
    */
   isTruthy(): ResolvedItem<T>[] {
-    return this.filter(Resolve.isTruthyPredicate);
+    return this.source.filter(
+      PredicateChain.isTruthyPredicate,
+      this.negated
+    );
   }
 
   /**
@@ -230,7 +279,10 @@ export class PredicateChain<T> {
    * ```
    */
   isFalsy(): ResolvedItem<T>[] {
-    return this.filter(Resolve.isFalsyPredicate);
+    return this.source.filter(
+      PredicateChain.isFalsyPredicate,
+      this.negated
+    );
   }
 
   /**
@@ -246,11 +298,124 @@ export class PredicateChain<T> {
    * ```
    */
   matches(regex: RegExp): ResolvedItem<T>[] {
-    return this.filter(Resolve.matchesPredicate(regex));
+    return this.source.filter(
+      PredicateChain.matchesPredicate(regex),
+      this.negated
+    );
   }
 
-  protected filter(predicate: (value: unknown) => boolean): ResolvedItem<T>[] {
-    return this.resolverInstance.filter(predicate, this.negated);
+  static isEqual(value: unknown, expected: unknown): boolean {
+    if (value instanceof Date && expected instanceof Date) {
+      return value.getTime() === expected.getTime();
+    }
+    return value === expected;
+  }
+
+  static equalsPredicate(expected: unknown) {
+    return (value: unknown): boolean => PredicateChain.isEqual(value, expected);
+  }
+
+  static containsPredicate(expected: unknown) {
+    const isExpectedString = typeof expected === "string";
+    const needle = isExpectedString
+      ? (expected as string).toLowerCase()
+      : undefined;
+
+    return (value: unknown): boolean => {
+      if (PredicateChain.isEqual(value, expected)) {
+        return true;
+      }
+
+      if (Array.isArray(value)) {
+        return value.includes(expected);
+      }
+
+      if (typeof value === "string" && needle !== undefined) {
+        return value.toLowerCase().includes(needle);
+      }
+
+      return false;
+    };
+  }
+
+  static startsWithPredicate(expected: string) {
+    return (value: unknown): boolean =>
+      typeof value === "string" && value.startsWith(expected);
+  }
+
+  static endsWithPredicate(expected: string) {
+    return (value: unknown): boolean =>
+      typeof value === "string" && value.endsWith(expected);
+  }
+
+  static greaterThanPredicate(expected: Comparable) {
+    return (value: unknown): boolean => {
+      const diff = PredicateChain.compare(value, expected);
+      return diff !== null && diff > 0;
+    };
+  }
+
+  static greaterThanOrEqualPredicate(expected: Comparable) {
+    return (value: unknown): boolean => {
+      const diff = PredicateChain.compare(value, expected);
+      return diff !== null && diff >= 0;
+    };
+  }
+
+  static lessThanPredicate(expected: Comparable) {
+    return (value: unknown): boolean => {
+      const diff = PredicateChain.compare(value, expected);
+      return diff !== null && diff < 0;
+    };
+  }
+
+  static lessThanOrEqualPredicate(expected: Comparable) {
+    return (value: unknown): boolean => {
+      const diff = PredicateChain.compare(value, expected);
+      return diff !== null && diff <= 0;
+    };
+  }
+
+  static isNullPredicate(value: unknown): boolean {
+    return value === null;
+  }
+
+  static isUndefinedPredicate(value: unknown): boolean {
+    return value === undefined;
+  }
+
+  static isTruthyPredicate(value: unknown): boolean {
+    return Boolean(value);
+  }
+
+  static isFalsyPredicate(value: unknown): boolean {
+    return !value;
+  }
+
+  static matchesPredicate(regex: RegExp) {
+    const cleanRegex =
+      regex.global || regex.sticky
+        ? new RegExp(regex.source, regex.flags.replace(/[gy]/g, ""))
+        : regex;
+
+    return (value: unknown): boolean =>
+      typeof value === "string" && cleanRegex.test(value);
+  }
+
+  private static compare(a: unknown, b: unknown): number | null {
+    if (a instanceof Date && b instanceof Date) {
+      return a.getTime() - b.getTime();
+    }
+    if (typeof a === "number" && typeof b === "number") {
+      return a - b;
+    }
+    if (typeof a === "bigint" && typeof b === "bigint") {
+      return a < b ? -1 : a > b ? 1 : 0;
+    }
+    if (typeof a === "string" && typeof b === "string") {
+      return a < b ? -1 : a > b ? 1 : 0;
+    }
+    return null;
   }
 }
 
@@ -258,12 +423,14 @@ export class PredicateChain<T> {
  * RESOLVE CLASS
  * ========================================================== */
 
-export class Resolve<T> extends PredicateChain<T> {
+export class Resolve<T> implements PredicateSource<T> {
+  private readonly predicates: PredicateChain<T>;
+
   private constructor(
     private readonly source: T,
     private readonly operations: readonly Operation[] = []
   ) {
-    super();
+    this.predicates = new PredicateChain(this, false);
   }
 
   /**
@@ -439,8 +606,73 @@ export class Resolve<T> extends PredicateChain<T> {
   }
 
   /* ==========================================================
-   * FILTER ENGINE & PREDICATE LOGIC
+   * PREDICATES & FLUENT NOT
    * ======================================================== */
+
+  /**
+   * Enters the negative predicate namespace without mutating the resolver.
+   *
+   * @example
+   * ```ts
+   * resolve(users).get("age").not.equals(30);
+   * resolve(roles).not.contains("admin");
+   * ```
+   */
+  get not(): NegatedPredicateChain<T> {
+    return this.predicates.not;
+  }
+
+  equals(expected: ResolvedItem<T>): ResolvedItem<T>[] {
+    return this.predicates.equals(expected);
+  }
+
+  contains(expected: ContainsTarget<T>): ResolvedItem<T>[] {
+    return this.predicates.contains(expected);
+  }
+
+  startsWith(expected: string): ResolvedItem<T>[] {
+    return this.predicates.startsWith(expected);
+  }
+
+  endsWith(expected: string): ResolvedItem<T>[] {
+    return this.predicates.endsWith(expected);
+  }
+
+  greaterThan(expected: Comparable): ResolvedItem<T>[] {
+    return this.predicates.greaterThan(expected);
+  }
+
+  greaterThanOrEqual(expected: Comparable): ResolvedItem<T>[] {
+    return this.predicates.greaterThanOrEqual(expected);
+  }
+
+  lessThan(expected: Comparable): ResolvedItem<T>[] {
+    return this.predicates.lessThan(expected);
+  }
+
+  lessThanOrEqual(expected: Comparable): ResolvedItem<T>[] {
+    return this.predicates.lessThanOrEqual(expected);
+  }
+
+  isNull(): ResolvedItem<T>[] {
+    return this.predicates.isNull();
+  }
+
+  isUndefined(): ResolvedItem<T>[] {
+    return this.predicates.isUndefined();
+  }
+
+  isTruthy(): ResolvedItem<T>[] {
+    return this.predicates.isTruthy();
+  }
+
+  isFalsy(): ResolvedItem<T>[] {
+    return this.predicates.isFalsy();
+  }
+
+  matches(regex: RegExp): ResolvedItem<T>[] {
+    return this.predicates.matches(regex);
+  }
 
   /**
    * Executes pipeline filtering with optional negation inversion.
@@ -452,104 +684,6 @@ export class Resolve<T> extends PredicateChain<T> {
     return this.execute().filter((value) =>
       negate ? !predicate(value) : predicate(value)
     ) as ResolvedItem<T>[];
-  }
-
-  static isEqual(value: unknown, expected: unknown): boolean {
-    if (value instanceof Date && expected instanceof Date) {
-      return value.getTime() === expected.getTime();
-    }
-    return value === expected;
-  }
-
-  static equalsPredicate(expected: unknown) {
-    return (value: unknown): boolean => Resolve.isEqual(value, expected);
-  }
-
-  static containsPredicate(expected: unknown) {
-    const isExpectedString = typeof expected === "string";
-    const needle = isExpectedString
-      ? (expected as string).toLowerCase()
-      : undefined;
-
-    return (value: unknown): boolean => {
-      if (Resolve.isEqual(value, expected)) {
-        return true;
-      }
-
-      if (Array.isArray(value)) {
-        return value.includes(expected);
-      }
-
-      if (typeof value === "string" && needle !== undefined) {
-        return value.toLowerCase().includes(needle);
-      }
-
-      return false;
-    };
-  }
-
-  static startsWithPredicate(expected: string) {
-    return (value: unknown): boolean =>
-      typeof value === "string" && value.startsWith(expected);
-  }
-
-  static endsWithPredicate(expected: string) {
-    return (value: unknown): boolean =>
-      typeof value === "string" && value.endsWith(expected);
-  }
-
-  static greaterThanPredicate(expected: Comparable) {
-    return (value: unknown): boolean => {
-      const diff = Resolve.compare(value, expected);
-      return diff !== null && diff > 0;
-    };
-  }
-
-  static greaterThanOrEqualPredicate(expected: Comparable) {
-    return (value: unknown): boolean => {
-      const diff = Resolve.compare(value, expected);
-      return diff !== null && diff >= 0;
-    };
-  }
-
-  static lessThanPredicate(expected: Comparable) {
-    return (value: unknown): boolean => {
-      const diff = Resolve.compare(value, expected);
-      return diff !== null && diff < 0;
-    };
-  }
-
-  static lessThanOrEqualPredicate(expected: Comparable) {
-    return (value: unknown): boolean => {
-      const diff = Resolve.compare(value, expected);
-      return diff !== null && diff <= 0;
-    };
-  }
-
-  static isNullPredicate(value: unknown): boolean {
-    return value === null;
-  }
-
-  static isUndefinedPredicate(value: unknown): boolean {
-    return value === undefined;
-  }
-
-  static isTruthyPredicate(value: unknown): boolean {
-    return Boolean(value);
-  }
-
-  static isFalsyPredicate(value: unknown): boolean {
-    return !value;
-  }
-
-  static matchesPredicate(regex: RegExp) {
-    const cleanRegex =
-      regex.global || regex.sticky
-        ? new RegExp(regex.source, regex.flags.replace(/[gy]/g, ""))
-        : regex;
-
-    return (value: unknown): boolean =>
-      typeof value === "string" && cleanRegex.test(value);
   }
 
   /**
@@ -766,26 +900,6 @@ export class Resolve<T> extends PredicateChain<T> {
     }
 
     return [];
-  }
-
-  /* ==========================================================
-   * COMPARISON HELPER
-   * ======================================================== */
-
-  private static compare(a: unknown, b: unknown): number | null {
-    if (a instanceof Date && b instanceof Date) {
-      return a.getTime() - b.getTime();
-    }
-    if (typeof a === "number" && typeof b === "number") {
-      return a - b;
-    }
-    if (typeof a === "bigint" && typeof b === "bigint") {
-      return a < b ? -1 : a > b ? 1 : 0;
-    }
-    if (typeof a === "string" && typeof b === "string") {
-      return a < b ? -1 : a > b ? 1 : 0;
-    }
-    return null;
   }
 
   /* ==========================================================
