@@ -248,19 +248,28 @@ export class Resolve<T> {
    */
   get not(): NegatedPredicates<T> {
     return {
-      equals: (expected: ResolvedItem<T>) => this.filterEquals(expected, true),
-      contains: (expected: ContainsTarget<T>) => this.filterContains(expected, true),
-      startsWith: (expected: string) => this.filterStartsWith(expected, true),
-      endsWith: (expected: string) => this.filterEndsWith(expected, true),
-      greaterThan: (expected: Comparable) => this.filterGreaterThan(expected, true),
-      greaterThanOrEqual: (expected: Comparable) => this.filterGreaterThanOrEqual(expected, true),
-      lessThan: (expected: Comparable) => this.filterLessThan(expected, true),
-      lessThanOrEqual: (expected: Comparable) => this.filterLessThanOrEqual(expected, true),
-      isNull: () => this.filterIsNull(true),
-      isUndefined: () => this.filterIsUndefined(true),
-      isTruthy: () => this.filterIsTruthy(true),
-      isFalsy: () => this.filterIsFalsy(true),
-      matches: (regex: RegExp) => this.filterMatches(regex, true),
+      equals: (expected: ResolvedItem<T>) =>
+        this.filter(Resolve.equalsPredicate(expected), true),
+      contains: (expected: ContainsTarget<T>) =>
+        this.filter(Resolve.containsPredicate(expected), true),
+      startsWith: (expected: string) =>
+        this.filter(Resolve.startsWithPredicate(expected), true),
+      endsWith: (expected: string) =>
+        this.filter(Resolve.endsWithPredicate(expected), true),
+      greaterThan: (expected: Comparable) =>
+        this.filter(Resolve.greaterThanPredicate(expected), true),
+      greaterThanOrEqual: (expected: Comparable) =>
+        this.filter(Resolve.greaterThanOrEqualPredicate(expected), true),
+      lessThan: (expected: Comparable) =>
+        this.filter(Resolve.lessThanPredicate(expected), true),
+      lessThanOrEqual: (expected: Comparable) =>
+        this.filter(Resolve.lessThanOrEqualPredicate(expected), true),
+      isNull: () => this.filter(Resolve.isNullPredicate, true),
+      isUndefined: () => this.filter(Resolve.isUndefinedPredicate, true),
+      isTruthy: () => this.filter(Resolve.isTruthyPredicate, true),
+      isFalsy: () => this.filter(Resolve.isFalsyPredicate, true),
+      matches: (regex: RegExp) =>
+        this.filter(Resolve.matchesPredicate(regex), true),
     };
   }
 
@@ -277,7 +286,7 @@ export class Resolve<T> {
    * ```
    */
   equals(expected: ResolvedItem<T>): ResolvedItem<T>[] {
-    return this.filterEquals(expected, false);
+    return this.filter(Resolve.equalsPredicate(expected));
   }
 
   /**
@@ -294,7 +303,7 @@ export class Resolve<T> {
    * ```
    */
   contains(expected: ContainsTarget<T>): ResolvedItem<T>[] {
-    return this.filterContains(expected, false);
+    return this.filter(Resolve.containsPredicate(expected));
   }
 
   /**
@@ -309,7 +318,7 @@ export class Resolve<T> {
    * ```
    */
   startsWith(expected: string): ResolvedItem<T>[] {
-    return this.filterStartsWith(expected, false);
+    return this.filter(Resolve.startsWithPredicate(expected));
   }
 
   /**
@@ -324,7 +333,7 @@ export class Resolve<T> {
    * ```
    */
   endsWith(expected: string): ResolvedItem<T>[] {
-    return this.filterEndsWith(expected, false);
+    return this.filter(Resolve.endsWithPredicate(expected));
   }
 
   /**
@@ -339,7 +348,7 @@ export class Resolve<T> {
    * ```
    */
   greaterThan(expected: Comparable): ResolvedItem<T>[] {
-    return this.filterGreaterThan(expected, false);
+    return this.filter(Resolve.greaterThanPredicate(expected));
   }
 
   /**
@@ -354,7 +363,7 @@ export class Resolve<T> {
    * ```
    */
   greaterThanOrEqual(expected: Comparable): ResolvedItem<T>[] {
-    return this.filterGreaterThanOrEqual(expected, false);
+    return this.filter(Resolve.greaterThanOrEqualPredicate(expected));
   }
 
   /**
@@ -369,7 +378,7 @@ export class Resolve<T> {
    * ```
    */
   lessThan(expected: Comparable): ResolvedItem<T>[] {
-    return this.filterLessThan(expected, false);
+    return this.filter(Resolve.lessThanPredicate(expected));
   }
 
   /**
@@ -384,7 +393,7 @@ export class Resolve<T> {
    * ```
    */
   lessThanOrEqual(expected: Comparable): ResolvedItem<T>[] {
-    return this.filterLessThanOrEqual(expected, false);
+    return this.filter(Resolve.lessThanOrEqualPredicate(expected));
   }
 
   /**
@@ -397,7 +406,7 @@ export class Resolve<T> {
    * ```
    */
   isNull(): ResolvedItem<T>[] {
-    return this.filterIsNull(false);
+    return this.filter(Resolve.isNullPredicate);
   }
 
   /**
@@ -410,7 +419,7 @@ export class Resolve<T> {
    * ```
    */
   isUndefined(): ResolvedItem<T>[] {
-    return this.filterIsUndefined(false);
+    return this.filter(Resolve.isUndefinedPredicate);
   }
 
   /**
@@ -423,7 +432,7 @@ export class Resolve<T> {
    * ```
    */
   isTruthy(): ResolvedItem<T>[] {
-    return this.filterIsTruthy(false);
+    return this.filter(Resolve.isTruthyPredicate);
   }
 
   /**
@@ -436,7 +445,7 @@ export class Resolve<T> {
    * ```
    */
   isFalsy(): ResolvedItem<T>[] {
-    return this.filterIsFalsy(false);
+    return this.filter(Resolve.isFalsyPredicate);
   }
 
   /**
@@ -452,50 +461,42 @@ export class Resolve<T> {
    * ```
    */
   matches(regex: RegExp): ResolvedItem<T>[] {
-    return this.filterMatches(regex, false);
+    return this.filter(Resolve.matchesPredicate(regex));
   }
 
   /* ==========================================================
-   * INTERNAL PREDICATE FILTER HELPERS
+   * FILTER ENGINE & PREDICATE LOGIC
    * ======================================================== */
 
   private filter(
     predicate: (value: unknown) => boolean,
-    negate: boolean
+    negate = false
   ): ResolvedItem<T>[] {
     return this.execute().filter((value) =>
       negate ? !predicate(value) : predicate(value)
     ) as ResolvedItem<T>[];
   }
 
-  private filterEquals(
-    expected: ResolvedItem<T>,
-    negate: boolean
-  ): ResolvedItem<T>[] {
-    return this.filter((value) => {
-      if (value instanceof Date && expected instanceof Date) {
-        return value.getTime() === expected.getTime();
-      }
-      return value === expected;
-    }, negate);
+  private static isEqual(value: unknown, expected: unknown): boolean {
+    if (value instanceof Date && expected instanceof Date) {
+      return value.getTime() === expected.getTime();
+    }
+    return value === expected;
   }
 
-  private filterContains(
-    expected: ContainsTarget<T>,
-    negate: boolean
-  ): ResolvedItem<T>[] {
+  private static equalsPredicate(expected: unknown) {
+    return (value: unknown): boolean => Resolve.isEqual(value, expected);
+  }
+
+  private static containsPredicate(expected: unknown) {
     const isExpectedString = typeof expected === "string";
     const needle = isExpectedString
       ? (expected as string).toLowerCase()
       : undefined;
 
-    return this.filter((value) => {
-      if (value === expected) {
+    return (value: unknown): boolean => {
+      if (Resolve.isEqual(value, expected)) {
         return true;
-      }
-
-      if (value instanceof Date && expected instanceof Date) {
-        return value.getTime() === expected.getTime();
       }
 
       if (Array.isArray(value)) {
@@ -507,98 +508,71 @@ export class Resolve<T> {
       }
 
       return false;
-    }, negate);
+    };
   }
 
-  private filterStartsWith(
-    expected: string,
-    negate: boolean
-  ): ResolvedItem<T>[] {
-    return this.filter(
-      (value) => typeof value === "string" && value.startsWith(expected),
-      negate
-    );
+  private static startsWithPredicate(expected: string) {
+    return (value: unknown): boolean =>
+      typeof value === "string" && value.startsWith(expected);
   }
 
-  private filterEndsWith(
-    expected: string,
-    negate: boolean
-  ): ResolvedItem<T>[] {
-    return this.filter(
-      (value) => typeof value === "string" && value.endsWith(expected),
-      negate
-    );
+  private static endsWithPredicate(expected: string) {
+    return (value: unknown): boolean =>
+      typeof value === "string" && value.endsWith(expected);
   }
 
-  private filterGreaterThan(
-    expected: Comparable,
-    negate: boolean
-  ): ResolvedItem<T>[] {
-    return this.filter((value) => {
+  private static greaterThanPredicate(expected: Comparable) {
+    return (value: unknown): boolean => {
       const diff = Resolve.compare(value, expected);
       return diff !== null && diff > 0;
-    }, negate);
+    };
   }
 
-  private filterGreaterThanOrEqual(
-    expected: Comparable,
-    negate: boolean
-  ): ResolvedItem<T>[] {
-    return this.filter((value) => {
+  private static greaterThanOrEqualPredicate(expected: Comparable) {
+    return (value: unknown): boolean => {
       const diff = Resolve.compare(value, expected);
       return diff !== null && diff >= 0;
-    }, negate);
+    };
   }
 
-  private filterLessThan(
-    expected: Comparable,
-    negate: boolean
-  ): ResolvedItem<T>[] {
-    return this.filter((value) => {
+  private static lessThanPredicate(expected: Comparable) {
+    return (value: unknown): boolean => {
       const diff = Resolve.compare(value, expected);
       return diff !== null && diff < 0;
-    }, negate);
+    };
   }
 
-  private filterLessThanOrEqual(
-    expected: Comparable,
-    negate: boolean
-  ): ResolvedItem<T>[] {
-    return this.filter((value) => {
+  private static lessThanOrEqualPredicate(expected: Comparable) {
+    return (value: unknown): boolean => {
       const diff = Resolve.compare(value, expected);
       return diff !== null && diff <= 0;
-    }, negate);
+    };
   }
 
-  private filterIsNull(negate: boolean): ResolvedItem<T>[] {
-    return this.filter((value) => value === null, negate);
+  private static isNullPredicate(value: unknown): boolean {
+    return value === null;
   }
 
-  private filterIsUndefined(negate: boolean): ResolvedItem<T>[] {
-    return this.filter((value) => value === undefined, negate);
+  private static isUndefinedPredicate(value: unknown): boolean {
+    return value === undefined;
   }
 
-  private filterIsTruthy(negate: boolean): ResolvedItem<T>[] {
-    return this.filter((value) => Boolean(value), negate);
+  private static isTruthyPredicate(value: unknown): boolean {
+    return Boolean(value);
   }
 
-  private filterIsFalsy(negate: boolean): ResolvedItem<T>[] {
-    return this.filter((value) => !value, negate);
+  private static isFalsyPredicate(value: unknown): boolean {
+    return !value;
   }
 
-  private filterMatches(
-    regex: RegExp,
-    negate: boolean
-  ): ResolvedItem<T>[] {
+  private static matchesPredicate(regex: RegExp) {
     const cleanRegex =
       regex.global || regex.sticky
         ? new RegExp(regex.source, regex.flags.replace(/[gy]/g, ""))
         : regex;
 
-    return this.filter(
-      (value) => typeof value === "string" && cleanRegex.test(value),
-      negate
-    );
+    return (value: unknown): boolean =>
+      typeof value === "string" && cleanRegex.test(value);
   }
 
   /**
