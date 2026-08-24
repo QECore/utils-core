@@ -44,7 +44,7 @@ const user = {
 | Check name exists  | `resolve(user).get("name").exists()`        | `true`        |
 | Check email exists | `resolve(user).get("email").exists()`       | `false`       |
 | Compare age        | `resolve(user).get("age").equals(30)`       | `true`        |
-| Compare age        | `resolve(user).get("age").notEquals(40)`    | `true`        |
+| Compare age        | `resolve(user).get("age").not.equals(40)`   | `true`        |
 
 Invalid paths are caught by TypeScript:
 
@@ -224,6 +224,76 @@ Array matching uses strict element membership.
 ```ts
 resolve([123, 456]).contains(23);
 // []
+```
+
+---
+
+# Predicates & Fluent `.not` Namespace
+
+`Resolve<T>` exposes intuitive positive predicates and their inverted negative forms under the fluent `.not` namespace.
+
+Calling `.not` returns an immutable, stateless predicate interface and never mutates the underlying resolver.
+
+## Basic usage
+
+```ts
+const numbers = [1, 2, 3];
+
+resolve(numbers).equals(2);
+// [2]
+
+resolve(numbers).not.equals(2);
+// [1, 3]
+```
+
+```ts
+const roles = ["admin", "user", "guest"];
+
+resolve(roles).contains("admin");
+// ["admin"]
+
+resolve(roles).not.contains("admin");
+// ["user", "guest"]
+```
+
+## General Rule
+
+```text
+positive predicate:
+.predicate()
+
+negative predicate:
+.not.predicate()
+```
+
+## Predicate Reference
+
+| Positive | Negative | Description |
+| :--- | :--- | :--- |
+| `.equals(value)` | `.not.equals(value)` | Strict equality (matches Dates by timestamp) |
+| `.contains(value)` | `.not.contains(value)` | Case-insensitive substring (strings) or element membership (arrays) |
+| `.startsWith(value)` | `.not.startsWith(value)` | Prefix matching on string values |
+| `.endsWith(value)` | `.not.endsWith(value)` | Suffix matching on string values |
+| `.greaterThan(value)` | `.not.greaterThan(value)` | Relative order `>` comparison |
+| `.greaterThanOrEqual(value)` | `.not.greaterThanOrEqual(value)` | Relative order `>=` comparison |
+| `.lessThan(value)` | `.not.lessThan(value)` | Relative order `<` comparison |
+| `.lessThanOrEqual(value)` | `.not.lessThanOrEqual(value)` | Relative order `<=` comparison |
+| `.isNull()` | `.not.isNull()` | Strict `null` check |
+| `.isUndefined()` | `.not.isUndefined()` | Strict `undefined` check |
+| `.isTruthy()` | `.not.isTruthy()` | Boolean truthiness check |
+| `.isFalsy()` | `.not.isFalsy()` | Boolean falsiness check |
+| `.matches(regex)` | `.not.matches(regex)` | Regular expression pattern match |
+
+## Migration Note
+
+`notEquals()` has been removed from the public API in favor of `.not.equals()`.
+
+```ts
+// Before
+resolve(data).get("age").notEquals(30);
+
+// After
+resolve(data).get("age").not.equals(30);
 ```
 
 ---

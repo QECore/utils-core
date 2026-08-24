@@ -3,6 +3,7 @@ import type {
   Comparable,
   ContainsTarget,
   Matcher,
+  NegatedPredicates,
   Path,
   ResolvedItem,
   SumResult,
@@ -232,6 +233,37 @@ export class Resolve<T> {
     return this.execute().length > 0;
   }
 
+  /* ==========================================================
+   * PREDICATES & FILTERING
+   * ======================================================== */
+
+  /**
+   * Provides negated versions of Resolve predicate methods without mutating the resolver.
+   *
+   * @example
+   * ```ts
+   * resolve(users).get("age").not.equals(30);
+   * resolve(roles).not.contains("admin");
+   * ```
+   */
+  get not(): NegatedPredicates<T> {
+    return {
+      equals: (expected: ResolvedItem<T>) => this.filterEquals(expected, true),
+      contains: (expected: ContainsTarget<T>) => this.filterContains(expected, true),
+      startsWith: (expected: string) => this.filterStartsWith(expected, true),
+      endsWith: (expected: string) => this.filterEndsWith(expected, true),
+      greaterThan: (expected: Comparable) => this.filterGreaterThan(expected, true),
+      greaterThanOrEqual: (expected: Comparable) => this.filterGreaterThanOrEqual(expected, true),
+      lessThan: (expected: Comparable) => this.filterLessThan(expected, true),
+      lessThanOrEqual: (expected: Comparable) => this.filterLessThanOrEqual(expected, true),
+      isNull: () => this.filterIsNull(true),
+      isUndefined: () => this.filterIsUndefined(true),
+      isTruthy: () => this.filterIsTruthy(true),
+      isFalsy: () => this.filterIsFalsy(true),
+      matches: (regex: RegExp) => this.filterMatches(regex, true),
+    };
+  }
+
   /**
    * Filters items strictly equal to the expected value.
    * Date comparisons evaluate timestamp equality.
@@ -245,32 +277,7 @@ export class Resolve<T> {
    * ```
    */
   equals(expected: ResolvedItem<T>): ResolvedItem<T>[] {
-    return this.execute().filter((value) => {
-      if (value instanceof Date && expected instanceof Date) {
-        return value.getTime() === expected.getTime();
-      }
-      return value === expected;
-    }) as ResolvedItem<T>[];
-  }
-
-  /**
-   * Filters items not equal to the expected value.
-   *
-   * @param expected Target value compatible with the resolved type.
-   *
-   * @example
-   * ```ts
-   * resolve(users).get("age").notEquals(30);
-   * // [22, 40]
-   * ```
-   */
-  notEquals(expected: ResolvedItem<T>): ResolvedItem<T>[] {
-    return this.execute().filter((value) => {
-      if (value instanceof Date && expected instanceof Date) {
-        return value.getTime() !== expected.getTime();
-      }
-      return value !== expected;
-    }) as ResolvedItem<T>[];
+    return this.filterEquals(expected, false);
   }
 
   /**
@@ -287,12 +294,202 @@ export class Resolve<T> {
    * ```
    */
   contains(expected: ContainsTarget<T>): ResolvedItem<T>[] {
+    return this.filterContains(expected, false);
+  }
+
+  /**
+   * Filters string values starting with the specified prefix.
+   *
+   * @param expected Prefix string.
+   *
+   * @example
+   * ```ts
+   * resolve(["apple", "banana"]).startsWith("app");
+   * // ["apple"]
+   * ```
+   */
+  startsWith(expected: string): ResolvedItem<T>[] {
+    return this.filterStartsWith(expected, false);
+  }
+
+  /**
+   * Filters string values ending with the specified suffix.
+   *
+   * @param expected Suffix string.
+   *
+   * @example
+   * ```ts
+   * resolve(["apple", "banana"]).endsWith("le");
+   * // ["apple"]
+   * ```
+   */
+  endsWith(expected: string): ResolvedItem<T>[] {
+    return this.filterEndsWith(expected, false);
+  }
+
+  /**
+   * Filters values strictly greater than the expected value.
+   *
+   * @param expected Comparable boundary (number, string, bigint, or Date).
+   *
+   * @example
+   * ```ts
+   * resolve([10, 20, 30]).greaterThan(15);
+   * // [20, 30]
+   * ```
+   */
+  greaterThan(expected: Comparable): ResolvedItem<T>[] {
+    return this.filterGreaterThan(expected, false);
+  }
+
+  /**
+   * Filters values greater than or equal to the expected value.
+   *
+   * @param expected Comparable boundary.
+   *
+   * @example
+   * ```ts
+   * resolve([10, 20, 30]).greaterThanOrEqual(20);
+   * // [20, 30]
+   * ```
+   */
+  greaterThanOrEqual(expected: Comparable): ResolvedItem<T>[] {
+    return this.filterGreaterThanOrEqual(expected, false);
+  }
+
+  /**
+   * Filters values strictly less than the expected value.
+   *
+   * @param expected Comparable boundary.
+   *
+   * @example
+   * ```ts
+   * resolve([10, 20, 30]).lessThan(25);
+   * // [10, 20]
+   * ```
+   */
+  lessThan(expected: Comparable): ResolvedItem<T>[] {
+    return this.filterLessThan(expected, false);
+  }
+
+  /**
+   * Filters values less than or equal to the expected value.
+   *
+   * @param expected Comparable boundary.
+   *
+   * @example
+   * ```ts
+   * resolve([10, 20, 30]).lessThanOrEqual(20);
+   * // [10, 20]
+   * ```
+   */
+  lessThanOrEqual(expected: Comparable): ResolvedItem<T>[] {
+    return this.filterLessThanOrEqual(expected, false);
+  }
+
+  /**
+   * Filters values that are strictly null.
+   *
+   * @example
+   * ```ts
+   * resolve([null, 1, 2]).isNull();
+   * // [null]
+   * ```
+   */
+  isNull(): ResolvedItem<T>[] {
+    return this.filterIsNull(false);
+  }
+
+  /**
+   * Filters values that are strictly undefined.
+   *
+   * @example
+   * ```ts
+   * resolve([undefined, 1, 2]).isUndefined();
+   * // [undefined]
+   * ```
+   */
+  isUndefined(): ResolvedItem<T>[] {
+    return this.filterIsUndefined(false);
+  }
+
+  /**
+   * Filters truthy values.
+   *
+   * @example
+   * ```ts
+   * resolve([0, 1, false, "text"]).isTruthy();
+   * // [1, "text"]
+   * ```
+   */
+  isTruthy(): ResolvedItem<T>[] {
+    return this.filterIsTruthy(false);
+  }
+
+  /**
+   * Filters falsy values.
+   *
+   * @example
+   * ```ts
+   * resolve([0, 1, false, "text"]).isFalsy();
+   * // [0, false]
+   * ```
+   */
+  isFalsy(): ResolvedItem<T>[] {
+    return this.filterIsFalsy(false);
+  }
+
+  /**
+   * Filters strings matching the provided regular expression.
+   * Cleans global/sticky flags to prevent stateful RegExp index bugs.
+   *
+   * @param regex Target regular expression pattern.
+   *
+   * @example
+   * ```ts
+   * resolve(["Alice", "Bob"]).matches(/^A/);
+   * // ["Alice"]
+   * ```
+   */
+  matches(regex: RegExp): ResolvedItem<T>[] {
+    return this.filterMatches(regex, false);
+  }
+
+  /* ==========================================================
+   * INTERNAL PREDICATE FILTER HELPERS
+   * ======================================================== */
+
+  private filter(
+    predicate: (value: unknown) => boolean,
+    negate: boolean
+  ): ResolvedItem<T>[] {
+    return this.execute().filter((value) =>
+      negate ? !predicate(value) : predicate(value)
+    ) as ResolvedItem<T>[];
+  }
+
+  private filterEquals(
+    expected: ResolvedItem<T>,
+    negate: boolean
+  ): ResolvedItem<T>[] {
+    return this.filter((value) => {
+      if (value instanceof Date && expected instanceof Date) {
+        return value.getTime() === expected.getTime();
+      }
+      return value === expected;
+    }, negate);
+  }
+
+  private filterContains(
+    expected: ContainsTarget<T>,
+    negate: boolean
+  ): ResolvedItem<T>[] {
     const isExpectedString = typeof expected === "string";
     const needle = isExpectedString
       ? (expected as string).toLowerCase()
       : undefined;
 
-    return this.execute().filter((value) => {
+    return this.filter((value) => {
       if (value === expected) {
         return true;
       }
@@ -310,194 +507,98 @@ export class Resolve<T> {
       }
 
       return false;
-    }) as ResolvedItem<T>[];
+    }, negate);
   }
 
-  /**
-   * Filters string values starting with the specified prefix.
-   *
-   * @param expected Prefix string.
-   *
-   * @example
-   * ```ts
-   * resolve(["apple", "banana"]).startsWith("app");
-   * // ["apple"]
-   * ```
-   */
-  startsWith(expected: string): ResolvedItem<T>[] {
-    return this.execute().filter(
-      (value) => typeof value === "string" && value.startsWith(expected)
-    ) as ResolvedItem<T>[];
+  private filterStartsWith(
+    expected: string,
+    negate: boolean
+  ): ResolvedItem<T>[] {
+    return this.filter(
+      (value) => typeof value === "string" && value.startsWith(expected),
+      negate
+    );
   }
 
-  /**
-   * Filters string values ending with the specified suffix.
-   *
-   * @param expected Suffix string.
-   *
-   * @example
-   * ```ts
-   * resolve(["apple", "banana"]).endsWith("le");
-   * // ["apple"]
-   * ```
-   */
-  endsWith(expected: string): ResolvedItem<T>[] {
-    return this.execute().filter(
-      (value) => typeof value === "string" && value.endsWith(expected)
-    ) as ResolvedItem<T>[];
+  private filterEndsWith(
+    expected: string,
+    negate: boolean
+  ): ResolvedItem<T>[] {
+    return this.filter(
+      (value) => typeof value === "string" && value.endsWith(expected),
+      negate
+    );
   }
 
-  /**
-   * Filters values strictly greater than the expected value.
-   *
-   * @param expected Comparable boundary (number, string, bigint, or Date).
-   *
-   * @example
-   * ```ts
-   * resolve([10, 20, 30]).greaterThan(15);
-   * // [20, 30]
-   * ```
-   */
-  greaterThan(expected: Comparable): ResolvedItem<T>[] {
-    return this.execute().filter((value) => {
+  private filterGreaterThan(
+    expected: Comparable,
+    negate: boolean
+  ): ResolvedItem<T>[] {
+    return this.filter((value) => {
       const diff = Resolve.compare(value, expected);
       return diff !== null && diff > 0;
-    }) as ResolvedItem<T>[];
+    }, negate);
   }
 
-  /**
-   * Filters values greater than or equal to the expected value.
-   *
-   * @param expected Comparable boundary.
-   *
-   * @example
-   * ```ts
-   * resolve([10, 20, 30]).greaterThanOrEqual(20);
-   * // [20, 30]
-   * ```
-   */
-  greaterThanOrEqual(expected: Comparable): ResolvedItem<T>[] {
-    return this.execute().filter((value) => {
+  private filterGreaterThanOrEqual(
+    expected: Comparable,
+    negate: boolean
+  ): ResolvedItem<T>[] {
+    return this.filter((value) => {
       const diff = Resolve.compare(value, expected);
       return diff !== null && diff >= 0;
-    }) as ResolvedItem<T>[];
+    }, negate);
   }
 
-  /**
-   * Filters values strictly less than the expected value.
-   *
-   * @param expected Comparable boundary.
-   *
-   * @example
-   * ```ts
-   * resolve([10, 20, 30]).lessThan(25);
-   * // [10, 20]
-   * ```
-   */
-  lessThan(expected: Comparable): ResolvedItem<T>[] {
-    return this.execute().filter((value) => {
+  private filterLessThan(
+    expected: Comparable,
+    negate: boolean
+  ): ResolvedItem<T>[] {
+    return this.filter((value) => {
       const diff = Resolve.compare(value, expected);
       return diff !== null && diff < 0;
-    }) as ResolvedItem<T>[];
+    }, negate);
   }
 
-  /**
-   * Filters values less than or equal to the expected value.
-   *
-   * @param expected Comparable boundary.
-   *
-   * @example
-   * ```ts
-   * resolve([10, 20, 30]).lessThanOrEqual(20);
-   * // [10, 20]
-   * ```
-   */
-  lessThanOrEqual(expected: Comparable): ResolvedItem<T>[] {
-    return this.execute().filter((value) => {
+  private filterLessThanOrEqual(
+    expected: Comparable,
+    negate: boolean
+  ): ResolvedItem<T>[] {
+    return this.filter((value) => {
       const diff = Resolve.compare(value, expected);
       return diff !== null && diff <= 0;
-    }) as ResolvedItem<T>[];
+    }, negate);
   }
 
-  /**
-   * Filters values that are strictly null.
-   *
-   * @example
-   * ```ts
-   * resolve([null, 1, 2]).isNull();
-   * // [null]
-   * ```
-   */
-  isNull(): ResolvedItem<T>[] {
-    return this.execute().filter(
-      (value) => value === null
-    ) as ResolvedItem<T>[];
+  private filterIsNull(negate: boolean): ResolvedItem<T>[] {
+    return this.filter((value) => value === null, negate);
   }
 
-  /**
-   * Filters values that are strictly undefined.
-   *
-   * @example
-   * ```ts
-   * resolve([undefined, 1, 2]).isUndefined();
-   * // [undefined]
-   * ```
-   */
-  isUndefined(): ResolvedItem<T>[] {
-    return this.execute().filter(
-      (value) => value === undefined
-    ) as ResolvedItem<T>[];
+  private filterIsUndefined(negate: boolean): ResolvedItem<T>[] {
+    return this.filter((value) => value === undefined, negate);
   }
 
-  /**
-   * Filters truthy values.
-   *
-   * @example
-   * ```ts
-   * resolve([0, 1, false, "text"]).isTruthy();
-   * // [1, "text"]
-   * ```
-   */
-  isTruthy(): ResolvedItem<T>[] {
-    return this.execute().filter((value) =>
-      Boolean(value)
-    ) as ResolvedItem<T>[];
+  private filterIsTruthy(negate: boolean): ResolvedItem<T>[] {
+    return this.filter((value) => Boolean(value), negate);
   }
 
-  /**
-   * Filters falsy values.
-   *
-   * @example
-   * ```ts
-   * resolve([0, 1, false, "text"]).isFalsy();
-   * // [0, false]
-   * ```
-   */
-  isFalsy(): ResolvedItem<T>[] {
-    return this.execute().filter((value) => !value) as ResolvedItem<T>[];
+  private filterIsFalsy(negate: boolean): ResolvedItem<T>[] {
+    return this.filter((value) => !value, negate);
   }
 
-  /**
-   * Filters strings matching the provided regular expression.
-   * Cleans global/sticky flags to prevent stateful RegExp index bugs.
-   *
-   * @param regex Target regular expression pattern.
-   *
-   * @example
-   * ```ts
-   * resolve(["Alice", "Bob"]).matches(/^A/);
-   * // ["Alice"]
-   * ```
-   */
-  matches(regex: RegExp): ResolvedItem<T>[] {
+  private filterMatches(
+    regex: RegExp,
+    negate: boolean
+  ): ResolvedItem<T>[] {
     const cleanRegex =
       regex.global || regex.sticky
         ? new RegExp(regex.source, regex.flags.replace(/[gy]/g, ""))
         : regex;
 
-    return this.execute().filter(
-      (value) => typeof value === "string" && cleanRegex.test(value)
-    ) as ResolvedItem<T>[];
+    return this.filter(
+      (value) => typeof value === "string" && cleanRegex.test(value),
+      negate
+    );
   }
 
   /**
