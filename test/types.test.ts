@@ -98,13 +98,18 @@ describe("Type Inference and Compile-time Checks", () => {
     resolve(data).get("active").equals(true);
 
     resolve(data).get("age").not.equals(30);
+    resolve(data).get("age").not.not.equals(30);
     resolve(data).get("name").not.equals("John");
+    resolve(data).get("name").not.not.equals("John");
     resolve(data).get("active").not.equals(true);
+    resolve(data).get("active").not.not.equals(true);
 
     resolve(data).get("roles").contains("admin");
     resolve(data).get("roles").not.contains("admin");
+    resolve(data).get("roles").not.not.contains("admin");
     resolve(data).get("ids").contains(2);
     resolve(data).get("ids").not.contains(2);
+    resolve(data).get("ids").not.not.contains(2);
 
     resolve(data).get("name").startsWith("J");
     resolve(data).get("name").not.startsWith("J");
@@ -130,6 +135,9 @@ describe("Type Inference and Compile-time Checks", () => {
     // @ts-expect-error type mismatch: number vs string
     resolve(data).get("age").not.equals("30");
 
+    // @ts-expect-error type mismatch: number vs string
+    resolve(data).get("age").not.not.equals("30");
+
     // @ts-expect-error type mismatch: string vs number
     resolve(data).get("name").not.equals(30);
 
@@ -141,6 +149,9 @@ describe("Type Inference and Compile-time Checks", () => {
 
     // @ts-expect-error type mismatch: number[] does not contain string
     resolve(data).get("ids").not.contains("invalid");
+
+    // @ts-expect-error type mismatch: number[] does not contain string
+    resolve(data).get("ids").not.not.contains("invalid");
   });
 
   it("enforces type safety for sum()", () => {

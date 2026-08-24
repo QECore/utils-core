@@ -1,2 +1,2 @@
-export { resolve } from "./Resolve";
+export { resolve, Resolve, PredicateChain } from "./Resolve";
 export { combinations, combine } from "./Combinations";
