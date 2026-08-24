@@ -1,20 +1,20 @@
-# util-core
+# ts-lib-core
 
 A high-performance, strongly-typed TypeScript utility library providing safe deep data resolution and Cartesian product test combination generation.
 
 ```bash
-npm install util-core
+npm install ts-lib-core
 ```
 
 ```ts
-import { resolve, combinations, combine } from "util-core";
+import { resolve, combinations, combine } from "ts-lib-core";
 ```
 
 ---
 
 ## Features
 
-- **Zero-Friction API**: Import directly from `"util-core"` with full TypeScript inference and IntelliSense.
+- **Zero-Friction API**: Import directly from `"ts-lib-core"` with full TypeScript inference and IntelliSense.
 - **Deep Path Resolution (`resolve`)**: Safe nested property access, single-level array boundary traversal, indexing, filtering, and aggregations.
 - **Strict Type-Safe Predicates**: Compile-time type checking on `equals()`, `notEquals()`, and `contains()`.
 - **Cartesian Product Combinations (`combinations`)**: Powerful test-matrix generator with deterministic test case names and Playwright-compatible metadata tags.
@@ -29,7 +29,7 @@ import { resolve, combinations, combine } from "util-core";
 `resolve` provides a chainable, lazy query engine for deep data structures.
 
 ```ts
-import { resolve } from "util-core";
+import { resolve } from "ts-lib-core";
 
 const data = {
   teams: [
@@ -170,7 +170,7 @@ resolve([true]).sum();          // Throws TypeError (unsupported type)
 `combinations` generates Cartesian products of test options for parameterized testing (e.g. Playwright, Vitest, Jest).
 
 ```ts
-import { combinations } from "util-core";
+import { combinations } from "ts-lib-core";
 
 const testCases = combinations({
   browser: ["chromium", "firefox"],
@@ -286,7 +286,7 @@ const cases = combinations.asArray([
 Concatenate independent combination suites into a single test collection without multiplying them:
 
 ```ts
-import { combinations, combine } from "util-core";
+import { combinations, combine } from "ts-lib-core";
 
 const browsers = combinations({ browser: ["chromium", "firefox"] });
 const environments = combinations({ env: ["local", "ci"] });
@@ -299,7 +299,7 @@ const allCases = combine(browsers, environments);
 
 ## TypeScript & Type Safety
 
-`util-core` provides end-to-end compile-time type safety. Invalid property paths are caught at compile time:
+`ts-lib-core` provides end-to-end compile-time type safety. Invalid property paths are caught at compile time:
 
 ```ts
 const data = {
