@@ -1,76 +1,68 @@
-import { describe, expect, it } from "vitest";
-// @ts-ignore - smoke test importing built artifact
-import { resolve as esmResolve, combinations as esmCombinations, combine as esmCombine } from "../dist/index.js";
+import { beforeAll, describe, expect, it } from "vitest";
 import { createRequire } from "node:module";
+import type { resolve as resolveFn, combinations as combinationsFn, concat as concatFn } from "../src";
+import { crm } from "./data";
 
-const require = createRequire(import.meta.url);
-const { resolve: cjsResolve, combinations: cjsCombinations, combine: cjsCombine } = require("../dist/index.cjs");
+type ModuleExports = {
+  resolve: typeof resolveFn;
+  combinations: typeof combinationsFn;
+  concat: typeof concatFn;
+};
 
 describe("Built Artifact Smoke Test (Dual ESM & CJS)", () => {
-  const sampleData = {
-    teams: [
-      {
-        name: "Platform",
-        lead: { role: "admin" },
-        members: [{ name: "John" }, { name: "Shan" }],
-      },
-      {
-        name: "QA",
-        lead: { role: "member" },
-        members: [{ name: "Charlie" }],
-      },
-    ],
-  };
+  let esmModule: ModuleExports;
+  let cjsModule: ModuleExports;
 
-  const runtimes = [
-    {
-      name: "ESM",
-      resolve: esmResolve,
-      combinations: esmCombinations,
-      combine: esmCombine,
-    },
-    {
-      name: "CJS",
-      resolve: cjsResolve,
-      combinations: cjsCombinations,
-      combine: cjsCombine,
-    },
-  ];
+  beforeAll(async () => {
+    const esmPath = "../dist/index.js";
+    esmModule = (await import(/* @vite-ignore */ esmPath)) as unknown as ModuleExports;
+    const require = createRequire(import.meta.url);
+    cjsModule = require("../dist/index.cjs") as ModuleExports;
+  });
 
-  runtimes.forEach(({ name, resolve, combinations, combine }) => {
-    it(`verifies full functional semantics with ${name} built artifact`, () => {
-      const members = resolve(sampleData).get("teams.members.name").values();
-      expect(members).toEqual(["John", "Shan", "Charlie"]);
+  const runSmokeSuite = (getModule: () => ModuleExports, name: string) => {
+    it(`verifies full functional semantics with ${name} built artifact using CRM dataset`, () => {
+      const { resolve, combinations, concat } = getModule();
 
-      // where() filtering
-      const adminTeams = resolve(sampleData).get("teams").where("lead.role:admin").values();
-      expect(adminTeams).toHaveLength(1);
-      expect(adminTeams[0]?.name).toBe("Platform");
+      // get() property extraction
+      const userNames = resolve(crm).get("users.name");
+      expect(userNames).toEqual(["Shan", "John", "Teja", "Anem"]);
 
-      // value(index), first(), last()
-      const r = resolve(members);
-      expect(r.value()).toBe("John");
-      expect(r.value(1)).toBe("Shan");
-      expect(r.first()).toBe("John");
-      expect(r.last()).toBe("Charlie");
+      // filter() narrowing
+      const activeProjects = resolve(crm.projects).filter("status=active").get("name");
+      expect(activeProjects).toEqual(["CRM"]);
 
-      // equals() and not.equals(), contains() and not.contains()
-      expect(resolve([1, 2, 3]).equals(2)).toEqual([2]);
-      expect(resolve([1, 2, 3]).not.equals(2)).toEqual([1, 3]);
-      expect(resolve("hello world").contains("world")).toEqual(["hello world"]);
-      expect(resolve("hello world").not.contains("world")).toEqual([]);
-      expect(resolve([123, 456]).contains(123)).toEqual([123]);
-      expect(resolve([123, 456]).not.contains(123)).toEqual([456]);
-      expect(resolve([123, 456]).contains(23)).toEqual([]);
-      expect(resolve([123, 456]).not.contains(23)).toEqual([123, 456]);
+      // at(index) cardinality shift and negative index
+      const dev = resolve(crm.users).filter("role=Developer").at(0).get("name");
+      expect(dev).toBe("Shan");
+      const designer = resolve(crm.users).filter("role=Designer").at(-1).get("name");
+      expect(designer).toBe("John");
 
-      // combinations & combine()
+      // terminal operations
+      expect(resolve(crm.users).count()).toBe(4);
+      expect(resolve(crm.users).some("role=Developer")).toBe(true);
+      expect(resolve(crm.users).every("role=Developer")).toBe(false);
+      expect(resolve(crm.users).none("role=Manager")).toBe(true);
+      expect(resolve(crm.users).index("role=QA")).toBe(2);
+      expect(resolve(crm.users).first()?.name).toBe("Shan");
+      expect(resolve(crm.users).last()?.name).toBe("Anem");
+
+      // groupBy()
+      const grouped = resolve(crm.users).groupBy("role");
+      expect(grouped.Developer).toHaveLength(1);
+      expect(grouped.Designer).toHaveLength(1);
+      expect(grouped.QA).toHaveLength(2);
+
+      // combinations & concat()
       const browsers = combinations({ browser: ["chromium", "firefox"] });
       const envs = combinations({ env: ["local", "ci"] });
-      const combined = combine(browsers, envs);
-      expect(combined).toHaveLength(4);
-      expect(combined[0]?.data).toEqual({ browser: "chromium" });
-      expect(combined[2]?.data).toEqual({ env: "local" });
+      const concatenated = concat(browsers, envs);
+      expect(concatenated).toHaveLength(4);
+      expect(concatenated[0]?.data).toEqual({ browser: "chromium" });
+      expect(concatenated[2]?.data).toEqual({ env: "local" });
     });
-  });
+  };
+
+  runSmokeSuite(() => esmModule, "ESM");
+  runSmokeSuite(() => cjsModule, "CJS");
 });

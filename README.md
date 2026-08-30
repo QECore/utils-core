@@ -1,856 +1,418 @@
 # ts-lib-core
 
-A strongly typed TypeScript utility library for deep data resolution and test-data combination generation.
+A small, fast, **end-to-end type-safe** data-query and Cartesian test-matrix library for TypeScript.
+
+- 🔍 Query nested data fluently — `resolve(data).filter(...).get(...)`
+- 🧠 Fully inferred types — return types derived from your paths
+- 🧪 Test matrices built in — `combinations()` + `concat()` with Playwright-style tags
+- 📦 Dual ESM + CJS, zero dependencies, Node ≥ 18
+
+## Installation
 
 ```bash
 npm install ts-lib-core
 ```
 
-```ts
-import { resolve, combinations, combine } from "ts-lib-core";
-```
-
-## What does it solve?
-
-| Utility          | Use it when you need to                                                      |
-| ---------------- | ---------------------------------------------------------------------------- |
-| `resolve()`      | Read, search, filter, compare, or aggregate nested data                      |
-| `combinations()` | Generate every possible combination of candidate values                      |
-| `combine()`      | Merge independently generated combinations without creating new combinations |
-
----
-
-# `resolve`
-
-`resolve()` provides a chainable, type-safe way to work with data.
-
-## Basic access
+Works out of the box with **ESM** (`import`) and **CommonJS** (`require`). Ships TypeScript declarations.
 
 ```ts
-const user = {
-  name: "Shan",
-  age: 30,
-  profile: {
-    city: "Hyderabad",
-  },
-};
+import { resolve, combinations, concat } from "ts-lib-core";
+// or: const { resolve } = require("ts-lib-core");
 ```
 
-| Need               | Usage                                       | Result        |
-| ------------------ | ------------------------------------------- | ------------- |
-| Get name           | `resolve(user).get("name").value()`         | `"Shan"`      |
-| Get age            | `resolve(user).get("age").value()`          | `30`          |
-| Get city           | `resolve(user).get("profile.city").value()` | `"Hyderabad"` |
-| Check name exists  | `resolve(user).get("name").exists()`        | `true`        |
-| Check email exists | `resolve(user).get("email").exists()`       | `false`       |
-| Compare age        | `resolve(user).get("age").equals(30)`       | `true`        |
-| Compare age        | `resolve(user).get("age").not.equals(40)`   | `true`        |
+## Quick Start
 
-Invalid paths are caught by TypeScript:
-
-```ts
-resolve(user).get("email");
-// TypeScript error
-```
-
----
-
-## Array values
-
-Define the data once:
-
-```ts
-const users = [
-  { name: "John", age: 30 },
-  { name: "Shan", age: 35 },
-  { name: "Alice", age: 28 },
-];
-```
-
-| Need            | Usage                                 | Result                      |
-| --------------- | ------------------------------------- | --------------------------- |
-| Get all names   | `resolve(users).get("name").values()` | `["John", "Shan", "Alice"]` |
-| Get first name  | `resolve(users).get("name").first()`  | `"John"`                    |
-| Get last name   | `resolve(users).get("name").last()`   | `"Alice"`                   |
-| Get second name | `resolve(users).get("name").value(1)` | `"Shan"`                    |
-| Count users     | `resolve(users).get("name").count()`  | `3`                         |
-| Get all ages    | `resolve(users).get("age").values()`  | `[30, 35, 28]`              |
-| Sum ages        | `resolve(users).get("age").sum()`     | `93`                        |
-
----
-
-## `at()` vs `value()`
-
-Use the same `users` data above.
-
-| Need                            | Usage                                      | Result                      |
-| ------------------------------- | ------------------------------------------ | --------------------------- |
-| Select second user              | `resolve(users).at(1).value()`             | `{ name: "Shan", age: 35 }` |
-| Select second user and continue | `resolve(users).at(1).get("name").value()` | `"Shan"`                    |
-| Get second name directly        | `resolve(users).get("name").value(1)`      | `"Shan"`                    |
-
-`at()` keeps the pipeline alive, while `value()` is terminal.
-
----
-
-## Nested arrays
-
-Define the data once:
-
-```ts
-const teams = [
-  {
-    name: "Engineering",
-    members: [
-      { name: "John", role: "developer" },
-      { name: "Shan", role: "architect" },
-    ],
-  },
-  {
-    name: "Design",
-    members: [
-      { name: "Alice", role: "designer" },
-    ],
-  },
-];
-```
-
-| Need                 | Usage                                         | Result                                   |
-| -------------------- | --------------------------------------------- | ---------------------------------------- |
-| Get teams            | `resolve(teams).values()`                     | All teams                                |
-| Get all members      | `resolve(teams).get("members").values()`      | 3 member objects                         |
-| Get all member names | `resolve(teams).get("members.name").values()` | `["John", "Shan", "Alice"]`              |
-| Get all roles        | `resolve(teams).get("members.role").values()` | `["developer", "architect", "designer"]` |
-| Count members        | `resolve(teams).get("members.name").count()`  | `3`                                      |
-| Get first member     | `resolve(teams).get("members.name").first()`  | `"John"`                                 |
-
-Array boundaries are automatically flattened by one level during property traversal.
-
----
-
-# `where()`
-
-Define the data once:
-
-```ts
-const users = [
-  { name: "John", role: "admin" },
-  { name: "Shan", role: "user" },
-  { name: "Alice", role: "administrator" },
-];
-```
-
-| Need                           | Usage                                         | Result      |
-| ------------------------------ | --------------------------------------------- | ----------- |
-| Find admins                    | `resolve(users).where("role:admin").values()` | John, Alice |
-| Find users                     | `resolve(users).where("role:user").values()`  | Shan        |
-| Find anyone containing `"min"` | `resolve(users).where("role:min").values()`   | John, Alice |
-
-`where()` uses `"path:expected"` and performs a case-insensitive substring match.
-
----
-
-## Nested `where()`
-
-Define the data once:
-
-```ts
-const users = [
-  {
-    name: "John",
-    profile: { role: "admin" },
-  },
-  {
-    name: "Shan",
-    profile: { role: "user" },
-  },
-];
-```
-
-| Need        | Usage                                                 | Result |
-| ----------- | ----------------------------------------------------- | ------ |
-| Find admins | `resolve(users).where("profile.role:admin").values()` | John   |
-| Find users  | `resolve(users).where("profile.role:user").values()`  | Shan   |
-
----
-
-## `where()` with nested arrays
-
-Using the `teams` data defined above:
-
-| Need                 | Usage                                                     | Result      |
-| -------------------- | --------------------------------------------------------- | ----------- |
-| Find developer teams | `resolve(teams).where("members.role:developer").values()` | Engineering |
-| Find designer teams  | `resolve(teams).where("members.role:designer").values()`  | Design      |
-| Find architect teams | `resolve(teams).where("members.role:architect").values()` | Engineering |
-
-If multiple values are resolved, the item matches when **any** value qualifies.
-
----
-
-# `contains()`
-
-## Strings
-
-Define the data once:
-
-```ts
-const message = "Hello World";
-```
-
-| Need                    | Usage                                | Result            |
-| ----------------------- | ------------------------------------ | ----------------- |
-| Find `"World"`          | `resolve(message).contains("World")` | `["Hello World"]` |
-| Case-insensitive search | `resolve(message).contains("world")` | `["Hello World"]` |
-| Missing text            | `resolve(message).contains("test")`  | `[]`              |
-
----
-
-## Arrays
-
-Define the data once:
-
-```ts
-const roles = ["admin", "user"];
-```
-
-| Need           | Usage                              | Result      |
-| -------------- | ---------------------------------- | ----------- |
-| Existing value | `resolve(roles).contains("admin")` | `["admin"]` |
-| Missing value  | `resolve(roles).contains("guest")` | `[]`        |
-
-Array matching uses strict element membership.
-
-```ts
-resolve([123, 456]).contains(23);
-// []
-```
-
----
-
-# Predicates & Fluent `.not` Namespace
-
-`Resolve<T>` exposes intuitive positive predicates and their inverted negative forms under the fluent `.not` namespace.
-
-Calling `.not` returns an immutable, stateless predicate interface and never mutates the underlying resolver.
-
-## Basic usage
-
-```ts
-const numbers = [1, 2, 3];
-
-resolve(numbers).equals(2);
-// [2]
-
-resolve(numbers).not.equals(2);
-// [1, 3]
-```
-
-```ts
-const roles = ["admin", "user", "guest"];
-
-resolve(roles).contains("admin");
-// ["admin"]
-
-resolve(roles).not.contains("admin");
-// ["user", "guest"]
-```
-
-## General Rule
-
-```text
-positive predicate:
-.predicate()
-
-negative predicate:
-.not.predicate()
-```
-
-## Predicate Reference
-
-| Positive | Negative | Description |
-| :--- | :--- | :--- |
-| `.equals(value)` | `.not.equals(value)` | Strict equality (matches Dates by timestamp) |
-| `.contains(value)` | `.not.contains(value)` | Case-insensitive substring (strings) or element membership (arrays) |
-| `.startsWith(value)` | `.not.startsWith(value)` | Prefix matching on string values |
-| `.endsWith(value)` | `.not.endsWith(value)` | Suffix matching on string values |
-| `.greaterThan(value)` | `.not.greaterThan(value)` | Relative order `>` comparison |
-| `.greaterThanOrEqual(value)` | `.not.greaterThanOrEqual(value)` | Relative order `>=` comparison |
-| `.lessThan(value)` | `.not.lessThan(value)` | Relative order `<` comparison |
-| `.lessThanOrEqual(value)` | `.not.lessThanOrEqual(value)` | Relative order `<=` comparison |
-| `.isNull()` | `.not.isNull()` | Strict `null` check |
-| `.isUndefined()` | `.not.isUndefined()` | Strict `undefined` check |
-| `.isTruthy()` | `.not.isTruthy()` | Boolean truthiness check |
-| `.isFalsy()` | `.not.isFalsy()` | Boolean falsiness check |
-| `.matches(regex)` | `.not.matches(regex)` | Regular expression pattern match |
-
-## Migration Note
-
-`notEquals()` has been removed from the public API in favor of `.not.equals()`.
-
-```ts
-// Before
-resolve(data).get("age").notEquals(30);
-
-// After
-resolve(data).get("age").not.equals(30);
-```
-
----
-
-# `sum()`
-
-Define the data once:
-
-```ts
-const numbers = [1, 2, 3];
-const words = ["a", "b", "c"];
-```
-
-| Need                | Usage                     | Result      |
-| ------------------- | ------------------------- | ----------- |
-| Sum numbers         | `resolve(numbers).sum()`  | `6`         |
-| Concatenate strings | `resolve(words).sum()`    | `"abc"`     |
-| Empty collection    | `resolve([]).sum()`       | `0`         |
-| Mixed types         | `resolve([1, "2"]).sum()` | `TypeError` |
-| Unsupported type    | `resolve([true]).sum()`   | `TypeError` |
-
----
-
-# Array indexing
-
-Define the data once:
-
-```ts
-const matrix = [
-  [1, 2],
-  [3, 4],
-];
-```
-
-| Need       | Usage                                | Result   |
-| ---------- | ------------------------------------ | -------- |
-| First row  | `resolve(matrix).get("[0]").value()` | `[1, 2]` |
-| Second row | `resolve(matrix).get("[1]").value()` | `[3, 4]` |
-
-Selecting an array item preserves its nested array structure.
-
----
-
-# Terminal operations
-
-| Method           | Return type        | Purpose                            |
-| ---------------- | ------------------ | ---------------------------------- |
-| `.value(index?)` | `T \| undefined`   | Get one resolved value             |
-| `.first()`       | `T \| undefined`   | Get the first value                |
-| `.last()`        | `T \| undefined`   | Get the last value                 |
-| `.values()`      | `T[]`              | Get all resolved values            |
-| `.count()`       | `number`           | Count resolved values              |
-| `.exists()`      | `boolean`          | Check whether a value exists       |
-| `.sum()`         | `number \| string` | Sum numbers or concatenate strings |
-
----
-
-# `combinations`
-
-`combinations()` generates every possible combination of candidate values.
-
-## One option
-
-Define the data once:
-
-```ts
-const browsers = ["chromium", "firefox"];
-```
-
-```ts
-const cases = combinations({
-  browser: browsers,
-});
-```
-
-| Need            | Usage                    | Result                    |
-| --------------- | ------------------------ | ------------------------- |
-| Get first data  | `cases[0].data`          | `{ browser: "chromium" }` |
-| Get second data | `cases[1].data`          | `{ browser: "firefox" }`  |
-| Get first name  | `cases[0].name`          | `"chromium"`              |
-| Get first tags  | `cases[0].metadata.tags` | `["@browser:chromium"]`   |
-
-```text
-2 candidates = 2 combinations
-```
-
----
-
-## Two options
-
-Define the data once:
-
-```ts
-const browsers = ["chromium", "firefox"];
-const environments = ["local", "ci"];
-```
-
-```ts
-const cases = combinations({
-  browser: browsers,
-  environment: environments,
-});
-```
-
-| Need            | Usage                    | Result                                          |
-| --------------- | ------------------------ | ----------------------------------------------- |
-| First data      | `cases[0].data`          | `{ browser: "chromium", environment: "local" }` |
-| First name      | `cases[0].name`          | `"chromium - local"`                            |
-| First tags      | `cases[0].metadata.tags` | `["@browser:chromium", "@environment:local"]`   |
-| Number of cases | `cases.length`           | `4`                                             |
-
-The generated combinations are:
-
-```text
-chromium + local
-chromium + ci
-firefox  + local
-firefox  + ci
-```
-
-```text
-2 × 2 = 4 combinations
-```
-
----
-
-## Three options
-
-Define the data once:
-
-```ts
-const browsers = ["chromium", "firefox"];
-const environments = ["local", "ci"];
-const devices = ["desktop", "mobile"];
-```
-
-```ts
-const cases = combinations({
-  browser: browsers,
-  environment: environments,
-  device: devices,
-});
-```
-
-| Need            | Usage           | Result                                                             |
-| --------------- | --------------- | ------------------------------------------------------------------ |
-| Number of cases | `cases.length`  | `8`                                                                |
-| First data      | `cases[0].data` | `{ browser: "chromium", environment: "local", device: "desktop" }` |
-| First name      | `cases[0].name` | `"chromium - local - desktop"`                                     |
-
-```text
-2 × 2 × 2 = 8 combinations
-```
-
----
-
-# Nested combinations
-
-Define the data once:
-
-```ts
-const roles = ["admin", "user"];
-const states = [true, false];
-```
-
-```ts
-const cases = combinations({
-  user: {
-    role: roles,
-    active: states,
-  },
-});
-```
-
-| Need            | Usage                    | Result                                      |
-| --------------- | ------------------------ | ------------------------------------------- |
-| Number of cases | `cases.length`           | `4`                                         |
-| First data      | `cases[0].data`          | `{ user: { role: "admin", active: true } }` |
-| First name      | `cases[0].name`          | `"admin - true"`                            |
-| First tags      | `cases[0].metadata.tags` | `["@user.role:admin", "@user.active:true"]` |
-
-```text
-2 × 2 = 4 combinations
-```
-
----
-
-# Constant values
-
-Define the data once:
-
-```ts
-const roles = ["admin", "user"];
-const active = true;
-```
-
-```ts
-const cases = combinations({
-  role: roles,
-  active,
-});
-```
-
-| Need            | Usage                    | Result                            |
-| --------------- | ------------------------ | --------------------------------- |
-| Number of cases | `cases.length`           | `2`                               |
-| First data      | `cases[0].data`          | `{ role: "admin", active: true }` |
-| First tags      | `cases[0].metadata.tags` | `["@role:admin", "@active:true"]` |
-
-Constant values are not expanded.
-
----
-
-# Objects as candidates
-
-Define the data once:
-
-```ts
-const users = [
-  { role: "admin" },
-  { role: "user" },
-];
-```
-
-```ts
-const cases = combinations({
-  user: users,
-});
-```
-
-| Need            | Usage           | Result                        |
-| --------------- | --------------- | ----------------------------- |
-| Number of cases | `cases.length`  | `2`                           |
-| First data      | `cases[0].data` | `{ user: { role: "admin" } }` |
-| Second data     | `cases[1].data` | `{ user: { role: "user" } }`  |
-
-Objects inside candidate arrays are treated as individual values.
-
----
-
-# Empty candidate arrays
-
-Define the data once:
-
-```ts
-const browsers = ["chromium"];
-const environments: string[] = [];
-```
-
-```ts
-const cases = combinations({
-  browser: browsers,
-  environment: environments,
-});
-```
-
-| Need            | Usage          | Result |
-| --------------- | -------------- | ------ |
-| Generated cases | `cases`        | `[]`   |
-| Number of cases | `cases.length` | `0`    |
-
-```text
-N × 0 = 0
-```
-
----
-
-# Custom `nameSeparator`
-
-Define the data once:
-
-```ts
-const browsers = ["chromium"];
-const environments = ["ci"];
-```
-
-```ts
-const cases = combinations(
-  {
-    browser: browsers,
-    environment: environments,
-  },
-  {
-    nameSeparator: " | ",
-  },
-);
-```
-
-| Need           | Usage           | Result             |
-| -------------- | --------------- | ------------------ |
-| Generated name | `cases[0].name` | `"chromium | ci"` |
-
-The default separator is `" - "`.
-
----
-
-# `combinations.asArray()`
-
-Define the data once:
-
-```ts
-const browsers = ["chromium", "firefox"];
-const environments = ["local", "ci"];
-```
-
-```ts
-const cases = combinations.asArray([
-  { browser: browsers },
-  { environment: environments },
-]);
-```
-
-| Need            | Usage           | Result                                                |
-| --------------- | --------------- | ----------------------------------------------------- |
-| Number of cases | `cases.length`  | `4`                                                   |
-| First data      | `cases[0].data` | `[{ browser: "chromium" }, { environment: "local" }]` |
-| Second data     | `cases[1].data` | `[{ browser: "chromium" }, { environment: "ci" }]`    |
-
----
-
-# `combine`
-
-`combine()` merges already-generated combination results.
-
-It does **not** create another Cartesian product.
-
-## Combine two suites
-
-Define the suites once:
-
-```ts
-const browsers = combinations({
-  browser: ["chromium", "firefox"],
-});
-
-const environments = combinations({
-  environment: ["local", "ci"],
-});
-```
-
-```ts
-const cases = combine(
-  browsers,
-  environments,
-);
-```
-
-| Need                        | Usage                 | Result                     |
-| --------------------------- | --------------------- | -------------------------- |
-| Number of browser cases     | `browsers.length`     | `2`                        |
-| Number of environment cases | `environments.length` | `2`                        |
-| Number after combine        | `cases.length`        | `4`                        |
-| First result                | `cases[0].data`       | `{ browser: "chromium" }`  |
-| Third result                | `cases[2].data`       | `{ environment: "local" }` |
-
-```text
-2 + 2 = 4
-```
-
-`combine()` concatenates results.
-
----
-
-## `combinations()` vs `combine()`
-
-| Goal                    | Usage                                    | Behavior          |
-| ----------------------- | ---------------------------------------- | ----------------- |
-| Generate combinations   | `combinations({ browser, environment })` | Cartesian product |
-| Merge generated results | `combine(browsers, environments)`        | Concatenation     |
-
-For example:
-
-```text
-combinations()
-2 browsers × 2 environments = 4
-
-combine()
-2 browser cases + 2 environment cases = 4
-```
-
----
-
-## Combine multiple suites
-
-Define the suites once:
-
-```ts
-const browsers = combinations({
-  browser: ["chromium", "firefox"],
-});
-
-const environments = combinations({
-  environment: ["local", "ci"],
-});
-
-const devices = combinations({
-  device: ["desktop", "mobile"],
-});
-```
-
-```ts
-const cases = combine(
-  browsers,
-  environments,
-  devices,
-);
-```
-
-| Need        | Usage          | Result |
-| ----------- | -------------- | ------ |
-| Total cases | `cases.length` | `6`    |
-| Calculation | `2 + 2 + 2`    | `6`    |
-
----
-
-# TypeScript type safety
-
-## Type-safe paths
-
-Define the data once:
-
-```ts
-const user = {
-  name: "Alice",
-  age: 30,
-};
-```
-
-| Usage                        | Result           |
-| ---------------------------- | ---------------- |
-| `resolve(user).get("name")`  | Valid            |
-| `resolve(user).get("age")`   | Valid            |
-| `resolve(user).get("email")` | TypeScript error |
-
----
-
-## Type inference
-
-Using the same `user` data:
-
-| Usage                                | Inferred type         |
-| ------------------------------------ | --------------------- |
-| `resolve(user).get("name").value()`  | `string | undefined` |
-| `resolve(user).get("age").value()`   | `number | undefined` |
-| `resolve(user).get("name").values()` | `string[]`            |
-| `resolve(user).get("age").values()`  | `number[]`            |
-
----
-
-## Type-safe predicates
-
-Using:
-
-```ts
-const user = {
-  age: 30,
-};
-```
-
-| Usage                                   | Result           |
-| --------------------------------------- | ---------------- |
-| `resolve(user).get("age").equals(30)`   | Valid            |
-| `resolve(user).get("age").equals(40)`   | Valid            |
-| `resolve(user).get("age").equals("30")` | TypeScript error |
-
----
-
-# Real-world example
-
-The same APIs can be used with larger structures once the basic operations are understood.
-
-Define the data once:
-
-```ts
-const application = {
-  teams: [
-    {
-      name: "Engineering",
-      lead: {
-        name: "Alice",
-        role: "admin",
-      },
-      members: [
-        {
-          name: "John",
-          role: "developer",
-          age: 30,
-        },
-        {
-          name: "Shan",
-          role: "architect",
-          age: 35,
-        },
-      ],
-    },
-    {
-      name: "Product",
-      lead: {
-        name: "Bob",
-        role: "manager",
-      },
-      members: [
-        {
-          name: "Charlie",
-          role: "designer",
-          age: 28,
-        },
-      ],
-    },
-  ],
-};
-```
-
-| Need                 | Usage                                                                        | Result                        |
-| -------------------- | ---------------------------------------------------------------------------- | ----------------------------- |
-| Get all members      | `resolve(application).get("teams.members").values()`                         | 3 members                     |
-| Get member names     | `resolve(application).get("teams.members.name").values()`                    | `["John", "Shan", "Charlie"]` |
-| Get member ages      | `resolve(application).get("teams.members.age").values()`                     | `[30, 35, 28]`                |
-| Find developer teams | `resolve(application).get("teams").where("members.role:developer").values()` | Engineering                   |
-| Get first lead       | `resolve(application).get("teams").at(0).get("lead.name").value()`           | `"Alice"`                     |
-| Sum member ages      | `resolve(application).get("teams.members.age").sum()`                        | `93`                          |
-
----
-
-# Package characteristics
-
-* **TypeScript-first** — strong compile-time inference.
-* **Framework agnostic** — works with Playwright, Jest, Vitest, or independently.
-* **ESM + CommonJS** — supports modern `import` and Node.js `require`.
-* **Zero runtime dependencies**.
-* **Composable APIs**.
-* **Type-safe property paths and predicates**.
-
-## Imports
+All examples in this README use this data:
 
 ```ts
 import { resolve } from "ts-lib-core";
+
+const users = [
+  { name: "John",  role: "admin", age: 30, profile: { city: "Hyderabad" } },
+  { name: "Shan",  role: "user",  age: 35, profile: { city: "Bengaluru" } },
+  { name: "Alice", role: "admin", age: 28, profile: { city: "Hyderabad" } },
+];
+
+const teams = [
+  {
+    name: "platform",
+    members: [
+      { name: "John",  role: "admin", roles: ["admin", "reviewer"], profile: { city: "Hyderabad" } },
+      { name: "Shan",  role: "user",  roles: ["developer"],         profile: { city: "Bengaluru" } },
+    ],
+  },
+  {
+    name: "mobile",
+    members: [
+      { name: "Alice", role: "admin", roles: ["admin"], profile: { city: "Pune" } },
+    ],
+  },
+];
 ```
 
 ```ts
-import { combinations } from "ts-lib-core";
+// Extract — nested paths included
+resolve(users).get("name");          // ["John", "Shan", "Alice"]        (string[])
+resolve(users).get("profile.city");  // ["Hyderabad", "Bengaluru", ...]  (string[])
+
+// Narrow — filters chain
+resolve(users).filter("role=admin").filter("age>=30").get("name");
+// ["John"]  (string[])
+
+// Select one item
+resolve(users).filter("role=admin").at(0).get("name");
+// "John"  (string | undefined)
+
+// Aggregate
+resolve(users).sum("age");   // 93  (number)
+resolve(users).avg("age");   // 31  (number)
+resolve(users).min("age");   // 28  (number | undefined)
+resolve(users).max("age");   // 35  (number | undefined)
+resolve(users).count();      // 3   (number)
+
+// Inspect
+resolve(users).some("role=admin");   // true
+resolve(users).every("age>=18");     // true
+resolve(users).none("role=guest");   // true
+
+// Deduplicate & group
+resolve(users).unique("profile.city");
+// ["Hyderabad", "Bengaluru"]  (string[])
+
+resolve(users).groupBy("role");
+// {
+//   admin: [{ name: "John", ... }, { name: "Alice", ... }],
+//   user:  [{ name: "Shan", ... }]
+// }
+```
+
+## Mental Model
+
+```text
+resolve(data)
+   ↓
+filter() / at()        → select / narrow          (chainable)
+   ↓
+get / some / every     → answer a question / extract
+none / index / first
+groupBy / sum / avg    → aggregate                (terminal)
+```
+
+1. **`resolve(data)`** wraps a single object or an array collection.
+2. **`filter()`** and **`at()`** are the only chainable methods.
+3. **Everything else is terminal** — it returns a native TypeScript value (`string[]`, `number`, `boolean`, `Record`, …) and cannot be chained.
+
+## API Reference
+
+### Entry point
+
+| Signature | Purpose |
+| :--- | :--- |
+| `resolve(data)` | Wrap a single object or an array collection for querying |
+
+### Chainable methods
+
+| Signature | Purpose |
+| :--- | :--- |
+| `.filter(matcher)` | Narrow items with the [matcher DSL](#matcher-dsl), e.g. `"role=admin"` |
+| `.filter(path, predicate)` | Narrow items with a type-safe callback — see [Predicates](#predicates) |
+| `.at(index)` | Select one item by zero-based or negative index (`-1` = last); out-of-range gives `undefined` |
+
+### Terminal methods
+
+| Signature | Purpose | Returns |
+| :--- | :--- | :--- |
+| `.get(path)` | Extract values at a dot-notated/indexed path | Native inferred type |
+| `.sum(path?)` | Sum of numeric values (skips non-numeric; `0` when empty) | `number` |
+| `.avg(path?)` | Average of numeric values (skips non-numeric; `0` when empty) | `number` |
+| `.min(path?)` | Minimum comparable value | Inferred type \| `undefined` |
+| `.max(path?)` | Maximum comparable value | Inferred type \| `undefined` |
+| `.unique(path?)` | Deduplicated values, source order preserved | Inferred array type |
+| `.count()` | Number of items | `number` |
+| `.exists(path)` | `true` if the path exists as a key on any item — even if the value is `null`/`undefined` | `boolean` |
+| `.hasValue(path)` | `true` if the path exists **and** has a non-nullish value | `boolean` |
+| `.some(matcher)` | `true` if at least one item matches the matcher DSL | `boolean` |
+| `.every(matcher)` | `true` if all items match the matcher DSL | `boolean` |
+| `.none(matcher)` | `true` if no item matches the matcher DSL | `boolean` |
+| `.index(matcher)` | Index of the first matching item in the current collection | `number` |
+| `.some(path, predicate)` | Predicate form — see [Predicates](#predicates) | `boolean` |
+| `.every(path, predicate)` | Predicate form | `boolean` |
+| `.none(path, predicate)` | Predicate form | `boolean` |
+| `.index(path, predicate)` | Predicate form | `number` |
+| `.groupBy(path)` | Group items by path value — see [Grouping](#grouping--groupby) | Typed `Record` |
+| `.first()` | First item, or `undefined` if empty | Item \| `undefined` |
+| `.last()` | Last item, or `undefined` if empty | Item \| `undefined` |
+
+### Standalone utilities
+
+| Signature | Purpose | Returns |
+| :--- | :--- | :--- |
+| `combinations(factors)` | Cartesian product of factor arrays, with `name` + `metadata.tags` | `Combination[]` |
+| `concat(...matrices)` | Concatenate multiple combination matrices | `Combination[]` |
+
+## Predicates
+
+`filter()`, `some()`, `none()`, `every()`, and `index()` accept a type-safe `(path, predicate)` pair. One rule explains everything:
+
+> **The path determines what the predicate receives.**
+
+```ts
+const team = teams[0]!;
+
+resolve(team).some("members.role", (role) => role === "admin");
+// role → "admin" | "user"
+
+resolve(team).some("members", (member) => member.role === "admin");
+// member → Member
+
+resolve(team).some("members.roles", (role) => role === "reviewer");
+// role → string (array elements tested individually)
+```
+
+### `filter(path, predicate)`
+
+```text
+teams → members[] → role → predicate(role) → matching member objects
 ```
 
 ```ts
-import { combine } from "ts-lib-core";
+resolve(teams).filter("members.role", (role) => role === "admin");
+// [
+//   { name: "John",  role: "admin", roles: ["admin", "reviewer"], profile: { city: "Hyderabad" } },
+//   { name: "Alice", role: "admin", roles: ["admin"],             profile: { city: "Pune" } }
+// ]  (Resolve<Member[]>)
 ```
 
-Or:
+> ⚠️ **Note:** Unlike `filter(matcher)` — which keeps collection items — the predicate form keeps the objects associated with path values that satisfy the predicate.
+
+### `index(path, predicate)`
+
+`index(path, predicate)` returns the index of the first item in the **current collection** whose path value matches — never a nested array index:
 
 ```ts
-import {
-  resolve,
-  combinations,
-  combine,
-} from "ts-lib-core";
+const testTeams = [
+  { name: "platform", members: [{ name: "John", role: "user" }] },
+  { name: "mobile",   members: [{ name: "Alice", role: "admin" }] },
+];
+
+resolve(testTeams).index("members.role", (role) => role === "admin");
+// 1  ← index of the "mobile" TEAM in teams, NOT Alice's position inside members[]
 ```
 
-# License
+Matcher and predicate forms are independent:
+
+- **Matcher form** (`"role=admin"`) — compares resolved values with the [matcher DSL](#matcher-dsl).
+- **Predicate form** (`"role", (v) => ...`) — receives each resolved value, typed by the path, and returns a boolean.
+
+Short-circuit behavior: `some`/`none` stop at the first decisive value; `every` stops at the first failure and returns `true` for empty collections.
+
+## Paths & Arrays
+
+These traversal rules are one set of semantics shared by every path-accepting method — `get()`, `filter(path, predicate)`, `some/none/every/index(path, predicate)`, and `groupBy(path)`. Learn them once here; examples below use `get()` because the result is easiest to see.
+
+```ts
+// 1. Leaf array properties flatten
+const matrix = { values: [["a", "b"], ["c"]] };
+resolve(matrix).get("values");
+// ["a", "b", "c"]  (string[])
+
+// 2. Traversing across arrays collects and flattens
+const team = { members: [{ name: "John", roles: ["admin", "dev"] }] };
+resolve(team).get("members.roles");
+// ["admin", "dev"]  (string[])
+
+// 3. Explicit indexing does NOT flatten
+const data = { roles: [["admin", "reviewer"], ["user"]] };
+resolve(data).get("roles[0]");     // ["admin", "reviewer"]  (string[] | undefined)
+resolve(data).get("roles[0][1]");  // "reviewer"             (string | undefined)
+resolve(data).get("roles[-1]");    // ["user"]               (string[] | undefined)
+
+// 4. Collections: missing properties contribute no element; explicit undefined/null preserved
+resolve([{ name: "John" }, {}]).get("name");  // ["John"]  (string[])
+resolve([{ name: undefined }]).get("name");   // [undefined]  ((string | undefined)[])
+resolve([{ name: null }]).get("name");        // [null]       ((string | null)[])
+
+// 5. Union objects: path on all members → exact type; on some members → | undefined injected
+type Mixed =
+  | { user: { name: string } }
+  | { user: { name: string }[] };
+
+const mixed: Mixed = { user: { name: "John" } };
+resolve(mixed).get("user.name");
+// type: string | string[]
+
+type MixedUsers =
+  | { users: { name: string } }
+  | { users: { name: string }[] };
+
+const mixedUsers: MixedUsers = { users: [{ name: "John" }] };
+resolve(mixedUsers).get("users[0].name");
+// type: string | undefined
+```
+
+## Matcher DSL
+
+Shared by `filter()`, `some()`, `every()`, `none()`, and `index()`.
+
+| Operator | Meaning | Example |
+| :---: | :--- | :--- |
+| `=` | Equal | `role=admin` |
+| `!=` | Not equal | `role!=admin` |
+| `~` | Contains | `name~John` |
+| `!~` | Doesn't contain | `name!~John` |
+| `^` | Starts with | `name^Jo` |
+| `$` | Ends with | `name$hn` |
+| `>` | Greater than | `age>30` |
+| `>=` | Greater or equal | `age>=30` |
+| `<` | Less than | `age<30` |
+| `<=` | Less or equal | `age<=30` |
+
+### Value coercion
+
+- **Booleans** — `"true"` / `"false"` parse as booleans: `active=true`
+- **Numbers** — unquoted numerics parse as numbers: `age>=30`
+- **Explicit strings** — quotes prevent coercion: `code="123"`
+- **No implicit coercion** — the string `"30"` does **not** match the number `30`
+
+### Negated matchers (`!=`, `!~`)
+
+Positive matchers are **existential** — for array paths, any matching element
+is enough. Negated matchers are **universal** — no element may match. This
+means items where the path is absent also satisfy negated matchers:
+
+```ts
+const accounts = [
+  { name: "John",  role: "admin" },
+  { name: "Shan",  role: "user" },
+  { name: "Ghost" }, // no `role` key
+];
+
+resolve(accounts).filter("role!=admin").get("name");
+// ["Shan", "Ghost"] — "Ghost" (no `role` key) matches because the path is absent
+```
+
+If you need "has a defined value AND the value differs", filter out
+missing/undefined values first:
+
+```ts
+resolve(accounts)
+  .filter("role", (role) => role !== undefined)  // drops items without a defined role
+  .filter("role!=admin")
+  .get("name");
+// ["Shan"]
+```
+
+> **Note:** `(role) => role !== undefined` keeps items whose resolved value is not `undefined` — it is **not** a key-existence check. `{ role: undefined }` is excluded, while `exists("role")` would return `true` for it. Use `exists()` / `hasValue()` for presence questions.
+
+## Presence vs Value Checking
+
+`exists()` checks key presence; `hasValue()` checks presence **and** a non-nullish value.
+
+| Data | `exists("x")` | `hasValue("x")` | Why |
+| :--- | :---: | :---: | :--- |
+| `{}` | `false` | `false` | Key doesn't exist |
+| `{ x: undefined }` | `true` | `false` | Key exists, value is `undefined` |
+| `{ x: null }` | `true` | `false` | Key exists, value is `null` |
+| `{ x: [] }` | `true` | `true` | Empty array is a valid value |
+| `{ x: 0 }` | `true` | `true` | Falsy number is valid |
+| `{ x: "" }` | `true` | `true` | Empty string is valid |
+| `{ x: false }` | `true` | `true` | `false` is valid |
+
+> **Invariant:** `hasValue(path) === true` strictly implies `exists(path) === true`.
+
+## Grouping — `groupBy(path)`
+
+`groupBy(path)` groups the objects that produced each grouping value into a typed dictionary keyed by `String(value)`.
+
+### Basic usage
+
+```ts
+resolve(users).groupBy("role");
+// {
+//   admin: [{ name: "John", role: "admin", age: 30, ... }, { name: "Alice", ... }],
+//   user:  [{ name: "Shan", role: "user", age: 35, ... }]
+// }
+```
+
+### Nested arrays — descendants are grouped, not parents
+
+```ts
+resolve(teams).groupBy("members.role");
+// {
+//   admin: [{ name: "John", role: "admin", ... }, { name: "Alice", role: "admin", ... }],
+//   user:  [{ name: "Shan", role: "user", ... }]
+// }
+```
+
+The **member** objects land in the buckets — the parent team is never duplicated.
+
+### Array-valued properties — items appear in every bucket
+
+```ts
+const user = { name: "John", roles: ["admin", "reviewer"] };
+
+resolve([user]).groupBy("roles");
+// {
+//   admin:    [{ name: "John", roles: ["admin", "reviewer"] }],
+//   reviewer: [{ name: "John", roles: ["admin", "reviewer"] }]
+// }
+```
+
+### GroupBy behavior
+
+| Situation | Result |
+| :--- | :--- |
+| Missing or `undefined` grouping value | Item grouped under key `"undefined"` |
+| `null` grouping value | Item grouped under key `"null"` |
+| Numeric key `20` | Stringified to `"20"` |
+| Boolean key `true` | Stringified to `"true"` |
+| Key collisions after stringification | Buckets merge |
+| Literal-union path | Output typed as `Partial<Record<"admin" \| "user", Item[]>>` |
+
+## Aggregations
+
+```ts
+resolve(users).sum("age");   // 93  — non-numeric values are skipped; 0 when empty
+resolve(users).avg("age");   // 31  — non-numeric values are skipped; 0 when empty
+resolve(users).min("age");   // 28  — undefined when no comparable value exists
+resolve(users).max("age");   // 35
+```
+
+`min`/`max` compare within a single value domain (`number`, `string`, `bigint`, `boolean`).
+
+## Test Matrices
+
+```ts
+import { combinations, concat } from "ts-lib-core";
+
+const browserEnvMatrix = combinations({
+  browser: ["chromium", "firefox"],
+  env: ["local", "ci"],
+});
+
+// [
+//   {
+//     data: { browser: "chromium", env: "local" },
+//     name: "chromium - local",
+//     metadata: { tags: ["@browser:chromium", "@env:local"] }
+//   },
+//   ...
+// ]
+
+const mobileMatrix = combinations({ device: ["pixel", "iphone"] });
+const allTestCases = concat(browserEnvMatrix, mobileMatrix);
+```
+
+### Using with Playwright
+
+```ts
+for (const { name, data, metadata } of browserEnvMatrix) {
+  test(`runs on ${name}`, { tag: metadata.tags }, async ({ page }) => {
+    // data.browser, data.env are fully typed
+  });
+}
+```
+
+## License
 
 MIT

@@ -1,13 +1,11 @@
-import { describe, expect, it } from "vitest";
-import { combinations, combine } from "../src";
+import { describe, expect, expectTypeOf, it } from "vitest";
+import { combinations, concat } from "../src";
+import { sampleBrowserOptions, sampleOsThemeOptions } from "./data";
 
 describe("combinations", () => {
   describe("Cartesian product generation", () => {
     it("generates Cartesian product for a single object with multiple options", () => {
-      const cases = combinations({
-        browser: ["chromium", "firefox"],
-        environment: ["local", "ci"],
-      });
+      const cases = combinations(sampleBrowserOptions);
 
       expect(cases).toHaveLength(4);
       expect(cases[0]).toEqual({
@@ -41,15 +39,9 @@ describe("combinations", () => {
     });
 
     it("respects custom nameSeparator", () => {
-      const cases = combinations(
-        {
-          os: ["mac", "windows"],
-          theme: ["dark", "light"],
-        },
-        {
-          nameSeparator: " | ",
-        }
-      );
+      const cases = combinations(sampleOsThemeOptions, {
+        nameSeparator: " | ",
+      });
 
       expect(cases[0]?.name).toBe("mac | dark");
       expect(cases[1]?.name).toBe("mac | light");
@@ -141,7 +133,7 @@ describe("combinations", () => {
     });
   });
 
-  describe("Candidate objects and combine()", () => {
+  describe("Candidate objects and concat()", () => {
     it("treats objects inside candidate arrays as discrete values (not recursively Cartesian expanded)", () => {
       const cases = combinations({
         user: [
@@ -155,12 +147,12 @@ describe("combinations", () => {
       expect(cases[1]?.data).toEqual({ user: { role: "user" } });
     });
 
-    it("combines independent combination sets without Cartesian multiplication", () => {
+    it("concatenates independent combination sets without Cartesian multiplication", () => {
       const browsers = combinations({ browser: ["chromium", "firefox"] });
       const envs = combinations({ env: ["local", "ci"] });
 
       // 2 browser cases + 2 env cases = 4 total cases (concatenated, NOT 2 * 2 = 4 multiplied)
-      const allCases = combine(browsers, envs);
+      const allCases = concat(browsers, envs);
       expect(allCases).toHaveLength(4);
       expect(allCases[0]?.data).toEqual({ browser: "chromium" });
       expect(allCases[1]?.data).toEqual({ browser: "firefox" });
@@ -168,19 +160,19 @@ describe("combinations", () => {
       expect(allCases[3]?.data).toEqual({ env: "ci" });
     });
 
-    it("supports combine() with 0, 1, 2, and 3 argument lists", () => {
-      expect(combine()).toEqual([]);
+    it("supports concat() with 0, 1, 2, and 3 argument lists", () => {
+      expect(concat()).toEqual([]);
 
       const a = combinations({ a: [1, 2] });
       const b = combinations({ b: [3, 4] });
       const c = combinations({ c: [5] });
 
-      expect(combine(a)).toHaveLength(2);
-      expect(combine(a, b)).toHaveLength(4);
-      expect(combine(a, b, c)).toHaveLength(5);
+      expect(concat(a)).toHaveLength(2);
+      expect(concat(a, b)).toHaveLength(4);
+      expect(concat(a, b, c)).toHaveLength(5);
     });
 
-    it("ensures combinations and combine do not mutate input objects or arrays", () => {
+    it("ensures combinations and concat do not mutate input objects or arrays", () => {
       const input = {
         browser: ["chromium", "firefox"],
         config: { timeout: [1000, 2000] },
@@ -188,9 +180,33 @@ describe("combinations", () => {
       const copy = JSON.parse(JSON.stringify(input));
 
       const cases = combinations(input);
-      combine(cases, cases);
+      concat(cases, cases);
 
       expect(input).toEqual(copy);
+    });
+  });
+
+  describe("Type Inference", () => {
+    it("infers strongly typed combination data", () => {
+      const cases = combinations({
+        browser: ["chromium", "firefox"],
+        environment: ["local", "ci"],
+      });
+
+      expectTypeOf(cases[0]!.data.browser).toEqualTypeOf<
+        "chromium" | "firefox"
+      >();
+      expectTypeOf(cases[0]!.data.environment).toEqualTypeOf<"local" | "ci">();
+    });
+
+    it("infers union type for concatenated combinations", () => {
+      const browsers = combinations({ browser: ["chromium", "firefox"] });
+      const envs = combinations({ env: ["local", "ci"] });
+      const allCases = concat(browsers, envs);
+
+      expectTypeOf(allCases[0]!).toEqualTypeOf<
+        (typeof browsers)[number] | (typeof envs)[number]
+      >();
     });
   });
 });

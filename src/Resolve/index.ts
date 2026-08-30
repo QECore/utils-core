@@ -1,592 +1,198 @@
-import type {
-  ArrayItem,
-  Comparable,
-  ContainsTarget,
-  Matcher,
-  Path,
-  ResolvedItem,
-  SumResult,
-  ValueAtPath,
+import {
+  type Path,
+  type ResolvedItem,
+  type GetReturnType,
+  type FilterMatcher,
+  type PathMatchValue,
+  type FilterResultItem,
+  type GroupablePath,
+  type GroupResult,
+  type SumResult,
 } from "./types";
+import {
+  flattenDeep,
+  parseMatcher,
+  evaluateMatcher,
+} from "./matcher";
 
-export type * from "./types";
-
-/* ============================================================
- * INTERNAL TYPES
- * ========================================================== */
+export * from "./types";
 
 type Operation =
-  | {
-      type: "path";
-      value: string;
-    }
-  | {
-      type: "where";
-      value: string;
-    }
-  | {
-      type: "index";
-      value: number;
-    };
-
-/* ============================================================
- * PREDICATE SOURCE CONTRACT (INTERNAL)
- * ========================================================== */
+  | { type: "filter"; matcher: string }
+  | { type: "filterPredicate"; path: string; predicate: (value: any) => boolean }
+  | { type: "at"; index: number };
 
 /**
- * Internal contract supplying raw predicate filtering execution to PredicateChain.
+ * Fluent query and navigation wrapper over hierarchical and flat data structures.
  */
-interface PredicateSource<T> {
-  filter(
-    predicate: (value: unknown) => boolean,
-    negate: boolean
-  ): ResolvedItem<T>[];
-}
+export class Resolve<T> implements Iterable<ResolvedItem<T>> {
+  private readonly source: T;
+  private readonly operations: readonly Operation[];
+  private readonly isSingle: boolean;
+  private cachedResult: unknown[] | undefined;
 
-/* ============================================================
- * PREDICATE CHAIN CLASS & TYPES
- * ========================================================== */
-
-/**
- * View of predicate methods in the negated namespace (does not expose another `.not`).
- */
-type NegatedPredicateChain<T> = Omit<PredicateChain<T>, "not">;
-
-/**
- * Provides type-safe predicate operations for resolved values.
- */
-export class PredicateChain<T> {
   constructor(
-    private readonly source: PredicateSource<T>,
-    private readonly negated = false
-  ) {}
-
-  /**
-   * Enters the negative predicate namespace without mutating the resolver.
-   *
-   * @example
-   * ```ts
-   * resolve(users).get("age").not.equals(30);
-   * resolve(roles).not.contains("admin");
-   * ```
-   */
-  get not(): NegatedPredicateChain<T> {
-    return new PredicateChain(this.source, true);
-  }
-
-  /**
-   * Filters items strictly equal to the expected value.
-   * Date comparisons evaluate timestamp equality.
-   *
-   * @param expected Target value compatible with the resolved type.
-   *
-   * @example
-   * ```ts
-   * resolve(users).get("age").equals(30);
-   * // [30]
-   * ```
-   */
-  equals(expected: ResolvedItem<T>): ResolvedItem<T>[] {
-    return this.source.filter(
-      PredicateChain.equalsPredicate(expected),
-      this.negated
-    );
-  }
-
-  /**
-   * Filters items containing the target:
-   * - For strings: case-insensitive substring search.
-   * - For arrays: exact element membership (no string coercion).
-   *
-   * @param expected Substring needle for strings, or exact element value for arrays.
-   *
-   * @example
-   * ```ts
-   * resolve("hello world").contains("world"); // ["hello world"]
-   * resolve(["admin", "user"]).contains("admin"); // ["admin"]
-   * ```
-   */
-  contains(expected: ContainsTarget<T>): ResolvedItem<T>[] {
-    return this.source.filter(
-      PredicateChain.containsPredicate(expected),
-      this.negated
-    );
-  }
-
-  /**
-   * Filters string values starting with the specified prefix.
-   *
-   * @param expected Prefix string.
-   *
-   * @example
-   * ```ts
-   * resolve(["apple", "banana"]).startsWith("app");
-   * // ["apple"]
-   * ```
-   */
-  startsWith(expected: string): ResolvedItem<T>[] {
-    return this.source.filter(
-      PredicateChain.startsWithPredicate(expected),
-      this.negated
-    );
-  }
-
-  /**
-   * Filters string values ending with the specified suffix.
-   *
-   * @param expected Suffix string.
-   *
-   * @example
-   * ```ts
-   * resolve(["apple", "banana"]).endsWith("le");
-   * // ["apple"]
-   * ```
-   */
-  endsWith(expected: string): ResolvedItem<T>[] {
-    return this.source.filter(
-      PredicateChain.endsWithPredicate(expected),
-      this.negated
-    );
-  }
-
-  /**
-   * Filters values strictly greater than the expected value.
-   *
-   * @param expected Comparable boundary (number, string, bigint, or Date).
-   *
-   * @example
-   * ```ts
-   * resolve([10, 20, 30]).greaterThan(15);
-   * // [20, 30]
-   * ```
-   */
-  greaterThan(expected: Comparable): ResolvedItem<T>[] {
-    return this.source.filter(
-      PredicateChain.greaterThanPredicate(expected),
-      this.negated
-    );
-  }
-
-  /**
-   * Filters values greater than or equal to the expected value.
-   *
-   * @param expected Comparable boundary.
-   *
-   * @example
-   * ```ts
-   * resolve([10, 20, 30]).greaterThanOrEqual(20);
-   * // [20, 30]
-   * ```
-   */
-  greaterThanOrEqual(expected: Comparable): ResolvedItem<T>[] {
-    return this.source.filter(
-      PredicateChain.greaterThanOrEqualPredicate(expected),
-      this.negated
-    );
-  }
-
-  /**
-   * Filters values strictly less than the expected value.
-   *
-   * @param expected Comparable boundary.
-   *
-   * @example
-   * ```ts
-   * resolve([10, 20, 30]).lessThan(25);
-   * // [10, 20]
-   * ```
-   */
-  lessThan(expected: Comparable): ResolvedItem<T>[] {
-    return this.source.filter(
-      PredicateChain.lessThanPredicate(expected),
-      this.negated
-    );
-  }
-
-  /**
-   * Filters values less than or equal to the expected value.
-   *
-   * @param expected Comparable boundary.
-   *
-   * @example
-   * ```ts
-   * resolve([10, 20, 30]).lessThanOrEqual(20);
-   * // [10, 20]
-   * ```
-   */
-  lessThanOrEqual(expected: Comparable): ResolvedItem<T>[] {
-    return this.source.filter(
-      PredicateChain.lessThanOrEqualPredicate(expected),
-      this.negated
-    );
-  }
-
-  /**
-   * Filters values that are strictly null.
-   *
-   * @example
-   * ```ts
-   * resolve([null, 1, 2]).isNull();
-   * // [null]
-   * ```
-   */
-  isNull(): ResolvedItem<T>[] {
-    return this.source.filter(
-      PredicateChain.isNullPredicate,
-      this.negated
-    );
-  }
-
-  /**
-   * Filters values that are strictly undefined.
-   *
-   * @example
-   * ```ts
-   * resolve([undefined, 1, 2]).isUndefined();
-   * // [undefined]
-   * ```
-   */
-  isUndefined(): ResolvedItem<T>[] {
-    return this.source.filter(
-      PredicateChain.isUndefinedPredicate,
-      this.negated
-    );
-  }
-
-  /**
-   * Filters truthy values.
-   *
-   * @example
-   * ```ts
-   * resolve([0, 1, false, "text"]).isTruthy();
-   * // [1, "text"]
-   * ```
-   */
-  isTruthy(): ResolvedItem<T>[] {
-    return this.source.filter(
-      PredicateChain.isTruthyPredicate,
-      this.negated
-    );
-  }
-
-  /**
-   * Filters falsy values.
-   *
-   * @example
-   * ```ts
-   * resolve([0, 1, false, "text"]).isFalsy();
-   * // [0, false]
-   * ```
-   */
-  isFalsy(): ResolvedItem<T>[] {
-    return this.source.filter(
-      PredicateChain.isFalsyPredicate,
-      this.negated
-    );
-  }
-
-  /**
-   * Filters strings matching the provided regular expression.
-   * Cleans global/sticky flags to prevent stateful RegExp index bugs.
-   *
-   * @param regex Target regular expression pattern.
-   *
-   * @example
-   * ```ts
-   * resolve(["Alice", "Bob"]).matches(/^A/);
-   * // ["Alice"]
-   * ```
-   */
-  matches(regex: RegExp): ResolvedItem<T>[] {
-    return this.source.filter(
-      PredicateChain.matchesPredicate(regex),
-      this.negated
-    );
-  }
-
-  static isEqual(value: unknown, expected: unknown): boolean {
-    if (value instanceof Date && expected instanceof Date) {
-      return value.getTime() === expected.getTime();
-    }
-    return value === expected;
-  }
-
-  static equalsPredicate(expected: unknown) {
-    return (value: unknown): boolean => PredicateChain.isEqual(value, expected);
-  }
-
-  static containsPredicate(expected: unknown) {
-    const isExpectedString = typeof expected === "string";
-    const needle = isExpectedString
-      ? (expected as string).toLowerCase()
-      : undefined;
-
-    return (value: unknown): boolean => {
-      if (PredicateChain.isEqual(value, expected)) {
-        return true;
-      }
-
-      if (Array.isArray(value)) {
-        return value.includes(expected);
-      }
-
-      if (typeof value === "string" && needle !== undefined) {
-        return value.toLowerCase().includes(needle);
-      }
-
-      return false;
-    };
-  }
-
-  static startsWithPredicate(expected: string) {
-    return (value: unknown): boolean =>
-      typeof value === "string" && value.startsWith(expected);
-  }
-
-  static endsWithPredicate(expected: string) {
-    return (value: unknown): boolean =>
-      typeof value === "string" && value.endsWith(expected);
-  }
-
-  static greaterThanPredicate(expected: Comparable) {
-    return (value: unknown): boolean => {
-      const diff = PredicateChain.compare(value, expected);
-      return diff !== null && diff > 0;
-    };
-  }
-
-  static greaterThanOrEqualPredicate(expected: Comparable) {
-    return (value: unknown): boolean => {
-      const diff = PredicateChain.compare(value, expected);
-      return diff !== null && diff >= 0;
-    };
-  }
-
-  static lessThanPredicate(expected: Comparable) {
-    return (value: unknown): boolean => {
-      const diff = PredicateChain.compare(value, expected);
-      return diff !== null && diff < 0;
-    };
-  }
-
-  static lessThanOrEqualPredicate(expected: Comparable) {
-    return (value: unknown): boolean => {
-      const diff = PredicateChain.compare(value, expected);
-      return diff !== null && diff <= 0;
-    };
-  }
-
-  static isNullPredicate(value: unknown): boolean {
-    return value === null;
-  }
-
-  static isUndefinedPredicate(value: unknown): boolean {
-    return value === undefined;
-  }
-
-  static isTruthyPredicate(value: unknown): boolean {
-    return Boolean(value);
-  }
-
-  static isFalsyPredicate(value: unknown): boolean {
-    return !value;
-  }
-
-  static matchesPredicate(regex: RegExp) {
-    const cleanRegex =
-      regex.global || regex.sticky
-        ? new RegExp(regex.source, regex.flags.replace(/[gy]/g, ""))
-        : regex;
-
-    return (value: unknown): boolean =>
-      typeof value === "string" && cleanRegex.test(value);
-  }
-
-  private static compare(a: unknown, b: unknown): number | null {
-    if (a instanceof Date && b instanceof Date) {
-      return a.getTime() - b.getTime();
-    }
-    if (typeof a === "number" && typeof b === "number") {
-      return a - b;
-    }
-    if (typeof a === "bigint" && typeof b === "bigint") {
-      return a < b ? -1 : a > b ? 1 : 0;
-    }
-    if (typeof a === "string" && typeof b === "string") {
-      return a < b ? -1 : a > b ? 1 : 0;
-    }
-    return null;
-  }
-}
-
-/* ============================================================
- * RESOLVE CLASS
- * ========================================================== */
-
-export class Resolve<T> implements PredicateSource<T> {
-  private readonly predicates: PredicateChain<T>;
-
-  private constructor(
-    private readonly source: T,
-    private readonly operations: readonly Operation[] = []
-  ) {
-    this.predicates = new PredicateChain(this, false);
-  }
-
-  /**
-   * Internal factory for constructing chained Resolve instances.
-   */
-  private static create<T>(
     source: T,
-    operations: readonly Operation[] = []
-  ): Resolve<T> {
-    return new Resolve<T>(source, operations);
+    operations: readonly Operation[] = [],
+    isSingle: boolean = !Array.isArray(source)
+  ) {
+    this.source = source;
+    this.operations = operations;
+    this.isSingle = isSingle;
   }
 
   /**
-   * Creates a root resolver instance for deep querying and filtering.
-   *
-   * @param source Data source (object, array, primitive).
-   *
-   * @example
-   * ```ts
-   * const r = resolve(data);
-   * ```
+   * Factory function that creates a new Resolve instance.
    */
   static from<T>(source: T): Resolve<T> {
-    return Resolve.create(source);
+    return new Resolve<T>(source);
   }
 
   /* ==========================================================
-   * PIPELINE / NAVIGATION
+   * CHAINABLE OPERATIONS (ONLY filter and at)
    * ======================================================== */
 
   /**
-   * Traverses a deep property path, automatically flattening one level of array boundaries.
+   * Narrows the collection to items matching the matcher DSL, e.g.
+   * `"role=admin"`, `"name~John"`, `"age>=30"`.
    *
-   * @param path Dot-delimited property path or index bracket notation.
+   * Negated matchers (`!=`, `!~`) also match items where the path is absent.
+   * Chainable: call further `filter()` or `at()` on the result.
+   *
+   * @param matcher - A matcher string.
+   * @returns A narrowed `Resolve<T>`.
    *
    * @example
    * ```ts
-   * resolve(users).get("teams.members.name");
+   * resolve(users).filter("role=admin").get("name");
+   * // ["John", "Alice"]
    * ```
    */
-  get<P extends Path<T>>(
-    path: P
-  ): Resolve<ValueAtPath<T, P>> {
-    return Resolve.create(this.source as any, [
-      ...this.operations,
-      { type: "path", value: path },
-    ]);
+  filter<M extends string>(matcher: FilterMatcher<T, M>): Resolve<T>;
+
+  /**
+   * Keeps the objects associated with path values that satisfy the predicate.
+   * When the path traverses an intermediate array, these are the descendants
+   * that produced matching values — not the items you started with. Arrays
+   * along the path are traversed element-by-element; a missing path resolves
+   * to `undefined` and is passed to the predicate.
+   *
+   * @param path - Dot-notated path, e.g. `"members.role"`.
+   * @param predicate - Type-safe callback; its parameter type is inferred from the path.
+   * @returns A narrowed `Resolve<FilterResultItem<T, P>>`.
+   *
+   * @example
+   * ```ts
+   * resolve(teams).filter("members.role", (role) => role === "admin");
+   * // the matched member objects, not the parent teams
+   * ```
+   */
+  filter<P extends Path<ResolvedItem<T>>>(
+    path: P,
+    predicate: (value: PathMatchValue<T, P>) => boolean
+  ): Resolve<FilterResultItem<T, P>>;
+
+  filter(
+    matcherOrPath: string,
+    predicate?: (value: any) => boolean
+  ): Resolve<any> {
+    if (typeof predicate === "function") {
+      return new Resolve<any>(
+        this.source,
+        [
+          ...this.operations,
+          { type: "filterPredicate", path: matcherOrPath, predicate },
+        ],
+        false
+      );
+    }
+    return new Resolve<any>(
+      this.source,
+      [...this.operations, { type: "filter", matcher: matcherOrPath }],
+      this.isSingle
+    );
   }
 
   /**
-   * Navigates to a specific zero-based index in the current resolved array.
-   * Keeps the pipeline active for subsequent chaining.
+   * Selects a single item by index. Supports negative indexes (`-1` is the
+   * last item). Out-of-range indexes model absence.
    *
-   * @param index Zero-based element position.
+   * @param index - Zero-based position, or a negative index counted from the end.
+   * @returns A `Resolve` wrapper around the item, possibly `undefined`.
    *
    * @example
    * ```ts
-   * resolve(users).at(0).get("name").value();
+   * resolve(users).at(-1).get("name"); // last user's name
    * ```
    */
   at(
     index: number
-  ): Resolve<ArrayItem<T> extends never ? T : ArrayItem<T>> {
-    return Resolve.create(this.source as any, [
-      ...this.operations,
-      { type: "index", value: index },
-    ]) as Resolve<ArrayItem<T> extends never ? T : ArrayItem<T>>;
-  }
-
-  /**
-   * Filters the collection by matching elements against a `"path:expected"` expression.
-   * If the path resolves to an array, the item matches if ANY nested value satisfies the condition.
-   *
-   * @param expression Filter expression in `"path:expected"` format.
-   *
-   * @example
-   * ```ts
-   * resolve(teams).where("lead.role:admin");
-   * resolve(teams).where("members.role:developer");
-   * ```
-   */
-  where(expression: Matcher<T>): Resolve<T> {
-    return Resolve.create(this.source, [
-      ...this.operations,
-      { type: "where", value: expression },
-    ]);
+  ): Resolve<(T extends readonly (infer Item)[] ? Item : T) | undefined> {
+    return new Resolve<(T extends readonly (infer Item)[] ? Item : T) | undefined>(
+      this.source as any,
+      [...this.operations, { type: "at", index }],
+      true
+    );
   }
 
   /* ==========================================================
-   * TERMINAL ACCESSORS
+   * TERMINAL OPERATIONS
    * ======================================================== */
 
   /**
-   * Executes the pipeline and returns the value at the specified index, or the first value.
-   * Returns `undefined` if no value exists at the index.
+   * Extracts values at a dot-notated path. Paths traversing arrays are
+   * flattened; explicit indexing (`[n]`, including negative) picks one position.
    *
-   * @param index Optional zero-based element position (defaults to 0).
+   * @param path - Dot-notated path, e.g. `"profile.city"` or `"roles[0]"`.
+   * @returns The resolved values, fully typed from the path.
    *
    * @example
    * ```ts
-   * resolve(user).get("name").value(); // "Shan"
-   * resolve(users).get("name").value(1); // "John"
+   * resolve(users).get("profile.city");
+   * // ["Hyderabad", "Bengaluru", "Hyderabad"]
    * ```
    */
-  value(index = 0): ResolvedItem<T> | undefined {
-    const results = this.execute();
-    if (index >= 0 && index < results.length) {
-      return results[index] as ResolvedItem<T>;
+  get<P extends Path<ResolvedItem<T>>>(
+    path: P
+  ): GetReturnType<T, P> {
+    const items = this.execute();
+
+    if (this.isSingle) {
+      if (items.length === 0) {
+        return undefined as GetReturnType<T, P>;
+      }
+      const item = items[0];
+      const values = this.resolveItemValues(item, path);
+      if (this.isPathTraversingArray(path, item)) {
+        return flattenDeep(values) as GetReturnType<T, P>;
+      }
+      if (values.length === 0) {
+        return undefined as GetReturnType<T, P>;
+      }
+      return values[0] as GetReturnType<T, P>;
     }
-    return undefined;
+
+    const result: unknown[] = [];
+    for (const item of items) {
+      const values = this.resolveItemValues(item, path);
+      result.push(...values);
+    }
+    return flattenDeep(result) as GetReturnType<T, P>;
   }
 
   /**
-   * Returns the first resolved value, or `undefined` if the result set is empty.
-   *
-   * @example
-   * ```ts
-   * resolve(users).get("name").first();
-   * ```
+   * Extracts resolved values as a flattened native array.
    */
-  first(): ResolvedItem<T> | undefined {
-    return this.value(0);
+  values<P extends Path<ResolvedItem<T>>>(path?: P): unknown[] {
+    return this.extractPathValues(path);
   }
 
   /**
-   * Returns the last resolved value, or `undefined` if the result set is empty.
+   * Returns the number of items in the current collection.
    *
    * @example
    * ```ts
-   * resolve(users).get("name").last();
-   * ```
-   */
-  last(): ResolvedItem<T> | undefined {
-    const values = this.execute();
-    return values.length > 0 ? (values[values.length - 1] as ResolvedItem<T>) : undefined;
-  }
-
-  /**
-   * Executes the resolution pipeline and returns all matching resolved values as an array.
-   *
-   * @example
-   * ```ts
-   * resolve(users).get("name").values();
-   * // ["Alice", "Bob"]
-   * ```
-   */
-  values(): ResolvedItem<T>[] {
-    return this.execute() as ResolvedItem<T>[];
-  }
-
-  /**
-   * Returns the number of resolved elements.
-   *
-   * @example
-   * ```ts
-   * resolve(users).get("name").count(); // 2
+   * resolve(users).count(); // 3
    * ```
    */
   count(): number {
@@ -594,384 +200,961 @@ export class Resolve<T> implements PredicateSource<T> {
   }
 
   /**
-   * Checks whether any resolved elements exist.
+   * Returns the sum of numeric values at the path. Non-numeric values are
+   * skipped; returns `0` when nothing numeric is found.
+   *
+   * @param path - Optional dot-notated path.
+   * @returns The numeric sum.
    *
    * @example
    * ```ts
-   * resolve(users).get("name").exists(); // true
+   * resolve(users).sum("age"); // 93
    * ```
    */
-  exists(): boolean {
-    return this.execute().length > 0;
-  }
-
-  /* ==========================================================
-   * PREDICATES & FLUENT NOT
-   * ======================================================== */
-
-  /**
-   * Enters the negative predicate namespace without mutating the resolver.
-   *
-   * @example
-   * ```ts
-   * resolve(users).get("age").not.equals(30);
-   * resolve(roles).not.contains("admin");
-   * ```
-   */
-  get not(): NegatedPredicateChain<T> {
-    return this.predicates.not;
-  }
-
-  equals(expected: ResolvedItem<T>): ResolvedItem<T>[] {
-    return this.predicates.equals(expected);
-  }
-
-  contains(expected: ContainsTarget<T>): ResolvedItem<T>[] {
-    return this.predicates.contains(expected);
-  }
-
-  startsWith(expected: string): ResolvedItem<T>[] {
-    return this.predicates.startsWith(expected);
-  }
-
-  endsWith(expected: string): ResolvedItem<T>[] {
-    return this.predicates.endsWith(expected);
-  }
-
-  greaterThan(expected: Comparable): ResolvedItem<T>[] {
-    return this.predicates.greaterThan(expected);
-  }
-
-  greaterThanOrEqual(expected: Comparable): ResolvedItem<T>[] {
-    return this.predicates.greaterThanOrEqual(expected);
-  }
-
-  lessThan(expected: Comparable): ResolvedItem<T>[] {
-    return this.predicates.lessThan(expected);
-  }
-
-  lessThanOrEqual(expected: Comparable): ResolvedItem<T>[] {
-    return this.predicates.lessThanOrEqual(expected);
-  }
-
-  isNull(): ResolvedItem<T>[] {
-    return this.predicates.isNull();
-  }
-
-  isUndefined(): ResolvedItem<T>[] {
-    return this.predicates.isUndefined();
-  }
-
-  isTruthy(): ResolvedItem<T>[] {
-    return this.predicates.isTruthy();
-  }
-
-  isFalsy(): ResolvedItem<T>[] {
-    return this.predicates.isFalsy();
-  }
-
-  matches(regex: RegExp): ResolvedItem<T>[] {
-    return this.predicates.matches(regex);
-  }
-
-  /**
-   * Executes pipeline filtering with optional negation inversion.
-   */
-  filter(
-    predicate: (value: unknown) => boolean,
-    negate = false
-  ): ResolvedItem<T>[] {
-    return this.execute().filter((value) =>
-      negate ? !predicate(value) : predicate(value)
-    ) as ResolvedItem<T>[];
-  }
-
-  /**
-   * Aggregates homogeneous number arrays into a sum, or concatenates string arrays.
-   * Returns 0 for empty collections. Throws a TypeError on mixed or unsupported types.
-   *
-   * @throws {TypeError} When elements contain mixed or non-numeric/non-string types.
-   *
-   * @example
-   * ```ts
-   * resolve([1, 2, 3]).sum(); // 6
-   * resolve(["a", "b"]).sum(); // "ab"
-   * resolve([]).sum(); // 0
-   * ```
-   */
-  sum(): SumResult<T> {
-    const values = this.execute();
-
+  sum<P extends Path<ResolvedItem<T>>>(path?: P): SumResult<T> {
+    const values = this.extractPathValues(path as string | undefined);
     if (values.length === 0) {
       return 0 as SumResult<T>;
     }
-
-    const firstVal = values[0];
-    const firstType = typeof firstVal;
-
-    if (
-      firstVal === null ||
-      (firstType !== "number" && firstType !== "string")
-    ) {
-      throw new TypeError(
-        `Unsupported element type for resolve().sum(): ${firstVal === null ? "null" : firstType}`
-      );
-    }
-
-    for (let i = 0; i < values.length; i++) {
-      const val = values[i];
-      if (val === null || typeof val !== firstType) {
-        const valType = val === null ? "null" : typeof val;
-        throw new TypeError(
-          `Cannot sum mixed types in resolve().sum(): encountered '${valType}' alongside '${firstType}'`
-        );
-      }
-    }
-
-    if (firstType === "string") {
-      let result = "";
-      for (const value of values) {
-        result += value as string;
-      }
-      return result as SumResult<T>;
-    }
-
     let total = 0;
-    for (const value of values) {
-      total += value as number;
+    for (const v of values) {
+      if (typeof v === "number" && !Number.isNaN(v)) {
+        total += v;
+      }
     }
     return total as SumResult<T>;
   }
 
+  /**
+   * Returns the average of numeric values at the path. Non-numeric values are
+   * skipped; returns `0` when nothing numeric is found.
+   *
+   * @param path - Optional dot-notated path.
+   * @returns The numeric average.
+   *
+   * @example
+   * ```ts
+   * resolve(users).avg("age"); // 31
+   * ```
+   */
+  avg<P extends Path<ResolvedItem<T>>>(path?: P): number {
+    const values = this.extractPathValues(path as string | undefined);
+    if (values.length === 0) {
+      return 0;
+    }
+    const numbers = values.filter(
+      (v): v is number => typeof v === "number" && !Number.isNaN(v)
+    );
+    if (numbers.length === 0) {
+      return 0;
+    }
+    const total = numbers.reduce((a, b) => a + b, 0);
+    return total / numbers.length;
+  }
+
+  /**
+   * Returns the minimum comparable value at the path, or `undefined` when
+   * no comparable value exists.
+   *
+   * @param path - Optional dot-notated path.
+   * @returns The minimum value.
+   *
+   * @example
+   * ```ts
+   * resolve(users).min("age"); // 28
+   * ```
+   */
+  min<P extends Path<ResolvedItem<T>>>(path?: P): unknown {
+    const values = this.extractPathValues(path as string | undefined);
+    const valid = values.filter((v) => v !== null && v !== undefined);
+    if (valid.length === 0) {
+      return undefined;
+    }
+    let minimum: any = valid[0];
+    for (let i = 1; i < valid.length; i++) {
+      if ((valid[i] as any) < minimum) {
+        minimum = valid[i];
+      }
+    }
+    return minimum;
+  }
+
+  /**
+   * Returns the maximum comparable value at the path, or `undefined` when
+   * no comparable value exists.
+   *
+   * @param path - Optional dot-notated path.
+   * @returns The maximum value.
+   *
+   * @example
+   * ```ts
+   * resolve(users).max("age"); // 35
+   * ```
+   */
+  max<P extends Path<ResolvedItem<T>>>(path?: P): unknown {
+    const values = this.extractPathValues(path as string | undefined);
+    const valid = values.filter((v) => v !== null && v !== undefined);
+    if (valid.length === 0) {
+      return undefined;
+    }
+    let maximum: any = valid[0];
+    for (let i = 1; i < valid.length; i++) {
+      if ((valid[i] as any) > maximum) {
+        maximum = valid[i];
+      }
+    }
+    return maximum;
+  }
+
+  /**
+   * Returns the deduplicated values at the path, preserving source order.
+   *
+   * @param path - Optional dot-notated path.
+   * @returns An array of unique values.
+   *
+   * @example
+   * ```ts
+   * resolve(users).unique("profile.city");
+   * // ["Hyderabad", "Bengaluru"]
+   * ```
+   */
+  unique<P extends Path<ResolvedItem<T>>>(path?: P): unknown[] {
+    const values = this.extractPathValues(path as string | undefined);
+    return Array.from(new Set(values));
+  }
+
+  /**
+   * Alias for exists().
+   */
+  has<P extends Path<ResolvedItem<T>>>(path: P): boolean {
+    return this.exists(path);
+  }
+
+  /**
+   * Returns `true` if the path exists as a key on any item — even when the
+   * value is `null` or `undefined`.
+   *
+   * @param path - Dot-notated path.
+   * @returns `true` if the path exists.
+   *
+   * @example
+   * ```ts
+   * resolve([{ x: undefined }]).exists("x"); // true
+   * resolve([{}]).exists("x");               // false
+   * ```
+   */
+  exists<P extends Path<ResolvedItem<T>>>(path: P): boolean {
+    const items = this.execute();
+    for (const item of items) {
+      if (this.itemPathExists(item, path)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * Returns `true` if the path exists on any item **and** its value is
+   * non-nullish (`!== null && !== undefined`).
+   *
+   * @param path - Dot-notated path.
+   * @returns `true` if the path exists with a non-nullish value.
+   *
+   * @example
+   * ```ts
+   * resolve([{ x: 0 }]).hasValue("x");        // true
+   * resolve([{ x: undefined }]).hasValue("x"); // false
+   * ```
+   */
+  hasValue<P extends Path<ResolvedItem<T>>>(path: P): boolean {
+    const items = this.execute();
+    for (const item of items) {
+      if (this.itemPathHasValue(item, path)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * Returns `true` when at least one item matches the matcher DSL.
+   * Short-circuits on the first match.
+   *
+   * @param matcher - A matcher string, e.g. `"role=admin"`.
+   * @returns `true` if any item matches.
+   *
+   * @example
+   * ```ts
+   * resolve(users).some("role=admin"); // true
+   * ```
+   */
+  some<M extends string>(matcher: FilterMatcher<T, M>): boolean;
+
+  /**
+   * Returns `true` when any value found at the path satisfies the predicate.
+   * Arrays along the path are traversed element-by-element.
+   * Short-circuits on the first match.
+   *
+   * @param path - Dot-notated path.
+   * @param predicate - Type-safe callback; its parameter type is inferred from the path.
+   * @returns `true` if any value satisfies the predicate.
+   *
+   * @example
+   * ```ts
+   * resolve(team).some("members.role", (role) => role === "admin"); // true
+   * ```
+   */
+  some<P extends Path<ResolvedItem<T>>>(
+    path: P,
+    predicate: (value: PathMatchValue<T, P>) => boolean
+  ): boolean;
+
+  some(
+    matcherOrPath: string,
+    predicate?: (value: any) => boolean
+  ): boolean {
+    if (typeof predicate === "function") {
+      const items = this.execute();
+      for (const item of items) {
+        for (const val of this.extractPathMatchValues(item, matcherOrPath)) {
+          try {
+            if (Boolean(predicate(val))) {
+              return true;
+            }
+          } catch {
+            // Ignore errors during predicate evaluation
+          }
+        }
+      }
+      return false;
+    }
+    const parsed = parseMatcher(matcherOrPath);
+    return this.execute().some((item) =>
+      evaluateMatcher(item, parsed, (target, p) =>
+        this.resolveItemValuesFlat(target, p)
+      )
+    );
+  }
+
+  /**
+   * Returns `true` when every item matches the matcher DSL.
+   * Returns `true` for empty collections.
+   *
+   * @param matcher - A matcher string, e.g. `"age>=18"`.
+   * @returns `true` if all items match.
+   *
+   * @example
+   * ```ts
+   * resolve(users).every("age>=18"); // true
+   * ```
+   */
+  every<M extends string>(matcher: FilterMatcher<T, M>): boolean;
+
+  /**
+   * Returns `true` when every value found at the path satisfies the predicate.
+   * Arrays along the path are traversed element-by-element.
+   * Returns `true` for empty collections. Short-circuits on the first failure.
+   *
+   * @param path - Dot-notated path.
+   * @param predicate - Type-safe callback; its parameter type is inferred from the path.
+   * @returns `true` if all values satisfy the predicate.
+   *
+   * @example
+   * ```ts
+   * resolve(team).every("members.role", (role) => role === "admin"); // false
+   * ```
+   */
+  every<P extends Path<ResolvedItem<T>>>(
+    path: P,
+    predicate: (value: PathMatchValue<T, P>) => boolean
+  ): boolean;
+
+  every(
+    matcherOrPath: string,
+    predicate?: (value: any) => boolean
+  ): boolean {
+    if (typeof predicate === "function") {
+      const items = this.execute();
+      if (items.length === 0) return true;
+      for (const item of items) {
+        for (const val of this.extractPathMatchValues(item, matcherOrPath)) {
+          try {
+            if (!Boolean(predicate(val))) {
+              return false;
+            }
+          } catch {
+            return false;
+          }
+        }
+      }
+      return true;
+    }
+    const parsed = parseMatcher(matcherOrPath);
+    const items = this.execute();
+    if (items.length === 0) return true;
+    return items.every((item) =>
+      evaluateMatcher(item, parsed, (target, p) =>
+        this.resolveItemValuesFlat(target, p)
+      )
+    );
+  }
+
+  /**
+   * Returns `true` when no item matches the matcher DSL.
+   * Short-circuits on the first match.
+   *
+   * @param matcher - A matcher string, e.g. `"role=guest"`.
+   * @returns `true` if no item matches.
+   *
+   * @example
+   * ```ts
+   * resolve(users).none("role=guest"); // true
+   * ```
+   */
+  none<M extends string>(matcher: FilterMatcher<T, M>): boolean;
+
+  /**
+   * Returns `true` when no value found at the path satisfies the predicate.
+   * Arrays along the path are traversed element-by-element.
+   * Short-circuits on the first match.
+   *
+   * @param path - Dot-notated path.
+   * @param predicate - Type-safe callback; its parameter type is inferred from the path.
+   * @returns `true` if no value satisfies the predicate.
+   *
+   * @example
+   * ```ts
+   * resolve(team).none("members.role", (role) => role === "manager"); // true
+   * ```
+   */
+  none<P extends Path<ResolvedItem<T>>>(
+    path: P,
+    predicate: (value: PathMatchValue<T, P>) => boolean
+  ): boolean;
+
+  none(
+    matcherOrPath: string,
+    predicate?: (value: any) => boolean
+  ): boolean {
+    if (typeof predicate === "function") {
+      return !this.some(matcherOrPath as any, predicate);
+    }
+    return !this.some(matcherOrPath as any);
+  }
+
+  /**
+   * Returns the zero-based index of the first item in the **current collection**
+   * whose path value satisfies the predicate or matches the matcher, or `-1`
+   * if none match. Nested arrays are traversed only to test values; the
+   * returned index always refers to the collection itself.
+   *
+   * @param matcher - A matcher string.
+   * @returns The index, or `-1`.
+   *
+   * @example
+   * ```ts
+   * resolve(users).index("role=admin"); // 0
+   * ```
+   */
+  index<M extends string>(matcher: FilterMatcher<T, M>): number;
+
+  /**
+   * Returns the zero-based index of the first item in the **current collection**
+   * whose path value satisfies the predicate, or `-1` if none match.
+   *
+   * @param path - Dot-notated path.
+   * @param predicate - Type-safe callback; its parameter type is inferred from the path.
+   * @returns The index, or `-1`.
+   *
+   * @example
+   * ```ts
+   * resolve(teams).index("members.role", (role) => role === "admin"); // 0
+   * ```
+   */
+  index<P extends Path<ResolvedItem<T>>>(
+    path: P,
+    predicate: (value: PathMatchValue<T, P>) => boolean
+  ): number;
+
+  index(
+    matcherOrPath: string,
+    predicate?: (value: any) => boolean
+  ): number {
+    const items = this.execute();
+    if (typeof predicate === "function") {
+      for (let i = 0; i < items.length; i++) {
+        for (const val of this.extractPathMatchValues(items[i], matcherOrPath)) {
+          try {
+            if (Boolean(predicate(val))) {
+              return i;
+            }
+          } catch {
+            // Ignore
+          }
+        }
+      }
+      return -1;
+    }
+    const parsed = parseMatcher(matcherOrPath);
+    for (let i = 0; i < items.length; i++) {
+      const matches = evaluateMatcher(items[i], parsed, (target, p) =>
+        this.resolveItemValuesFlat(target, p)
+      );
+      if (matches) {
+        return i;
+      }
+    }
+    return -1;
+  }
+
+  /**
+   * Groups the objects that produced each grouping value into a typed
+   * dictionary keyed by `String(value)`.
+   *
+   * - Paths through intermediate arrays group the descendant objects.
+   * - Array-valued properties place the item in every matching bucket.
+   * - Missing/`undefined` values group under `"undefined"`; `null` under `"null"`.
+   *
+   * @param path - Dot-notated path, e.g. `"role"` or `"members.role"`.
+   * @returns A typed dictionary of grouped items.
+   *
+   * @example
+   * ```ts
+   * resolve(users).groupBy("role");
+   * // { admin: [John, Alice], user: [Shan] }
+   * ```
+   */
+  groupBy<P extends GroupablePath<ResolvedItem<T>>>(
+    path: P
+  ): GroupResult<T, P> {
+    const groups: Record<string, any[]> = {};
+    const items = this.execute();
+
+    for (const item of items) {
+      const entries = this.resolveGroupEntries(item, path as string);
+      for (const entry of entries) {
+        const { target, value } = entry;
+        const rawValues = Array.isArray(value) ? flattenDeep(value) : [value];
+        const distinctKeys = Array.from(
+          new Set(
+            rawValues.map((v) =>
+              v === undefined ? "undefined" : v === null ? "null" : String(v)
+            )
+          )
+        );
+        for (const key of distinctKeys) {
+          (groups[key] ??= []).push(target);
+        }
+      }
+    }
+
+    return groups as GroupResult<T, P>;
+  }
+
+  /**
+   * Returns the first item or undefined if empty.
+   * Terminal: returns actual typed item or undefined.
+   */
+  first(): ResolvedItem<T> | undefined {
+    const items = this.execute();
+    return items.length > 0 ? (items[0] as ResolvedItem<T>) : undefined;
+  }
+
+  /**
+   * Returns the last item or undefined if empty.
+   * Terminal: returns actual typed item or undefined.
+   */
+  last(): ResolvedItem<T> | undefined {
+    const items = this.execute();
+    return items.length > 0
+      ? (items[items.length - 1] as ResolvedItem<T>)
+      : undefined;
+  }
+
   /* ==========================================================
-   * EXECUTION PIPELINE
+   * ITERABLE & LENGTH
+   * ======================================================== */
+
+  /**
+   * Number of items currently resolved.
+   */
+  get length(): number {
+    return this.execute().length;
+  }
+
+  /**
+   * Allows iteration over resolved items.
+   */
+  *[Symbol.iterator](): IterableIterator<ResolvedItem<T>> {
+    yield* this.execute() as ResolvedItem<T>[];
+  }
+
+  /* ==========================================================
+   * EXECUTION ENGINE
    * ======================================================== */
 
   private execute(): unknown[] {
+    if (this.cachedResult !== undefined) {
+      return this.cachedResult;
+    }
+
     if (this.source === null || this.source === undefined) {
-      return [];
+      this.cachedResult = [];
+      return this.cachedResult;
     }
 
     let current: unknown[] = Array.isArray(this.source)
       ? [...this.source]
       : [this.source];
 
-    for (const operation of this.operations) {
-      switch (operation.type) {
-        case "path":
-          current = this.applyPath(current, operation.value);
-          break;
+    for (const op of this.operations) {
+      if (op.type === "filter") {
+        const parsed = parseMatcher(op.matcher);
+        current = current.filter((item) =>
+          evaluateMatcher(item, parsed, (target, p) =>
+            this.resolveItemValuesFlat(target, p)
+          )
+        );
+      } else if (op.type === "filterPredicate") {
+        const matchedItems: unknown[] = [];
+        const seen = new Set<unknown>();
 
-        case "where":
-          current = this.applyWhere(current, operation.value);
-          break;
-
-        case "index":
-          current = this.applyIndex(current, operation.value);
-          break;
-      }
-
-      if (current.length === 0) {
-        break;
-      }
-    }
-
-    return current;
-  }
-
-  /* ==========================================================
-   * PATH EVALUATION
-   * ======================================================== */
-
-  private applyPath(
-    sources: readonly unknown[],
-    path: string
-  ): unknown[] {
-    const segments = Resolve.parsePath(path);
-    let current: unknown[] = [...sources];
-
-    for (const segment of segments) {
-      if (segment.type === "property") {
-        current = this.readProperty(current, segment.key);
-      } else {
-        current = this.readIndex(current, segment.index);
-      }
-
-      if (current.length === 0) {
-        break;
-      }
-    }
-
-    return current;
-  }
-
-  /* ==========================================================
-   * PROPERTY ACCESS
-   * ======================================================== */
-
-  private readProperty(
-    sources: readonly unknown[],
-    key: string
-  ): unknown[] {
-    const result: unknown[] = [];
-
-    for (const source of sources) {
-      if (source === null || source === undefined) {
-        continue;
-      }
-
-      if (Array.isArray(source)) {
-        for (const item of source) {
-          this.collectProperty(item, key, result);
-        }
-        continue;
-      }
-
-      this.collectProperty(source, key, result);
-    }
-
-    return result;
-  }
-
-  private collectProperty(
-    source: unknown,
-    key: string,
-    result: unknown[]
-  ): void {
-    if (
-      source === null ||
-      source === undefined ||
-      typeof source !== "object"
-    ) {
-      return;
-    }
-
-    if (!(key in source)) {
-      return;
-    }
-
-    const value = (source as Record<string, unknown>)[key];
-
-    if (Array.isArray(value)) {
-      for (const item of value) {
-        result.push(item);
-      }
-      return;
-    }
-
-    result.push(value);
-  }
-
-  /* ==========================================================
-   * INDEX ACCESS
-   * ======================================================== */
-
-  private applyIndex(
-    sources: readonly unknown[],
-    index: number
-  ): unknown[] {
-    if (index >= 0 && index < sources.length) {
-      const item = sources[index];
-      if (item !== undefined) {
-        return [item];
-      }
-    }
-    return [];
-  }
-
-  private readIndex(
-    sources: readonly unknown[],
-    index: number
-  ): unknown[] {
-    if (sources.length === 1 && Array.isArray(sources[0])) {
-      const inner = sources[0];
-      if (index >= 0 && index < inner.length) {
-        const val = inner[index];
-        return val !== undefined ? [val] : [];
-      }
-      return [];
-    }
-
-    if (index >= 0 && index < sources.length) {
-      const item = sources[index];
-      if (item !== undefined) {
-        return [item];
-      }
-    }
-
-    return [];
-  }
-
-  /* ==========================================================
-   * WHERE FILTERING
-   * ======================================================== */
-
-  private applyWhere(
-    sources: readonly unknown[],
-    expression: string
-  ): unknown[] {
-    const separator = expression.indexOf(":");
-
-    if (separator < 1) {
-      return [];
-    }
-
-    const path = expression.slice(0, separator);
-    const expected = expression.slice(separator + 1).toLowerCase();
-
-    const result: unknown[] = [];
-
-    for (const source of sources) {
-      if (source === null || source === undefined) {
-        continue;
-      }
-
-      if (Array.isArray(source)) {
-        for (const item of source) {
-          if (this.matchesItem(item, path, expected)) {
-            result.push(item);
+        for (const item of current) {
+          const rawEntries = this.resolveGroupEntries(item, op.path);
+          for (const entry of rawEntries) {
+            const { target, value } = entry;
+            if (
+              Array.isArray(value) &&
+              target === item &&
+              value.length > 0 &&
+              typeof value[0] === "object" &&
+              value[0] !== null
+            ) {
+              for (const elem of flattenDeep(value)) {
+                if (!seen.has(elem)) {
+                  try {
+                    if (Boolean(op.predicate(elem))) {
+                      seen.add(elem);
+                      matchedItems.push(elem);
+                    }
+                  } catch {
+                    // Ignore errors during predicate evaluation
+                  }
+                }
+              }
+            } else if (Array.isArray(value)) {
+              if (!seen.has(target)) {
+                for (const elem of flattenDeep(value)) {
+                  try {
+                    if (Boolean(op.predicate(elem))) {
+                      seen.add(target);
+                      matchedItems.push(target);
+                      break;
+                    }
+                  } catch {
+                    // Ignore
+                  }
+                }
+              }
+            } else {
+              if (!seen.has(target)) {
+                try {
+                  if (Boolean(op.predicate(value))) {
+                    seen.add(target);
+                    matchedItems.push(target);
+                  }
+                } catch {
+                  // Ignore
+                }
+              }
+            }
           }
         }
-        continue;
+        current = matchedItems;
+      } else if (op.type === "at") {
+        const targetIndex =
+          op.index < 0 ? current.length + op.index : op.index;
+        if (targetIndex >= 0 && targetIndex < current.length) {
+          current = [current[targetIndex]];
+        } else {
+          current = [];
+        }
       }
 
-      if (this.matchesItem(source, path, expected)) {
-        result.push(source);
+      if (current.length === 0) {
+        break;
       }
     }
 
-    return result;
+    this.cachedResult = current;
+    return this.cachedResult;
   }
 
-  private matchesItem(
-    source: unknown,
-    path: string,
-    expected: string
-  ): boolean {
-    if (
-      source === null ||
-      typeof source !== "object" ||
-      Array.isArray(source)
-    ) {
+  private extractPathValues(path?: string): unknown[] {
+    const items = this.execute();
+    if (!path) {
+      return flattenDeep(items);
+    }
+
+    const result: unknown[] = [];
+    for (const item of items) {
+      result.push(...this.resolveItemValues(item, path));
+    }
+    return flattenDeep(result);
+  }
+
+  private *extractPathMatchValues(
+    item: unknown,
+    path: string
+  ): IterableIterator<unknown> {
+    const rawEntries = this.resolveGroupEntries(item, path);
+    for (const entry of rawEntries) {
+      const { target, value } = entry;
+      if (
+        Array.isArray(value) &&
+        target === item &&
+        value.length > 0 &&
+        typeof value[0] === "object" &&
+        value[0] !== null
+      ) {
+        for (const elem of flattenDeep(value)) {
+          yield elem;
+        }
+      } else if (Array.isArray(value)) {
+        for (const elem of flattenDeep(value)) {
+          yield elem;
+        }
+      } else {
+        yield value;
+      }
+    }
+  }
+
+  private resolveGroupEntries(
+    item: unknown,
+    path: string
+  ): { target: unknown; value: unknown }[] {
+    if (item === null || item === undefined || typeof item !== "object") {
+      return [{ target: item, value: undefined }];
+    }
+
+    const segments = Resolve.parsePath(path);
+    let currentEntries: { current: unknown; target: unknown }[] = [
+      { current: item, target: item },
+    ];
+
+    for (let i = 0; i < segments.length; i++) {
+      const segment = segments[i]!;
+      const isLast = i === segments.length - 1;
+      const nextIsIndex = !isLast && segments[i + 1]?.type === "index";
+      const nextEntries: { current: unknown; target: unknown }[] = [];
+
+      for (const entry of currentEntries) {
+        const { current, target } = entry;
+
+        if (current === null || current === undefined || typeof current !== "object") {
+          nextEntries.push({ current: undefined, target });
+          continue;
+        }
+
+        if (segment.type === "property") {
+          const key = segment.key;
+          if (Array.isArray(current)) {
+            for (const elem of current) {
+              if (elem !== null && elem !== undefined && typeof elem === "object" && key in elem) {
+                const val = (elem as any)[key];
+                const nextTarget =
+                  isLast || nextIsIndex
+                    ? elem
+                    : typeof val === "object" && val !== null
+                      ? elem
+                      : target;
+                nextEntries.push({ current: val, target: nextTarget });
+              } else {
+                nextEntries.push({ current: undefined, target: elem });
+              }
+            }
+          } else if (key in current) {
+            const val = (current as any)[key];
+            const nextTarget =
+              Array.isArray(val) && !isLast
+                ? target
+                : target;
+            nextEntries.push({ current: val, target: nextTarget });
+          } else {
+            nextEntries.push({ current: undefined, target });
+          }
+        } else if (segment.type === "index") {
+          const idx = segment.index;
+          if (Array.isArray(current)) {
+            const actualIdx = idx < 0 ? current.length + idx : idx;
+            const elem = current[actualIdx];
+            const nextTarget =
+              elem !== null && typeof elem === "object" && !isLast
+                ? elem
+                : target;
+            nextEntries.push({ current: elem, target: nextTarget });
+          } else {
+            nextEntries.push({ current: undefined, target });
+          }
+        }
+      }
+
+      currentEntries = nextEntries;
+    }
+
+    return currentEntries.map((e) => ({
+      target: e.target,
+      value: e.current,
+    }));
+  }
+
+  private resolveItemValues(
+    item: unknown,
+    path: string
+  ): unknown[] {
+    if (item === null || item === undefined || typeof item !== "object") {
+      return [];
+    }
+
+    const segments = Resolve.parsePath(path);
+    let currentNodes: unknown[] = [item];
+
+    for (let i = 0; i < segments.length; i++) {
+      const segment = segments[i]!;
+      const isLast = i === segments.length - 1;
+      const nextIsIndex = !isLast && segments[i + 1]?.type === "index";
+      const nextNodes: unknown[] = [];
+
+      for (const node of currentNodes) {
+        if (node === null || node === undefined || typeof node !== "object") {
+          continue;
+        }
+
+        if (segment.type === "property") {
+          const key = segment.key;
+          if (Array.isArray(node)) {
+            for (const elem of node) {
+              if (elem !== null && elem !== undefined && typeof elem === "object" && key in elem) {
+                const val = (elem as any)[key];
+                if (Array.isArray(val)) {
+                  if (isLast || nextIsIndex) {
+                    nextNodes.push(val);
+                  } else {
+                    nextNodes.push(...val);
+                  }
+                } else {
+                  nextNodes.push(val);
+                }
+              }
+            }
+          } else if (key in node) {
+            const val = (node as any)[key];
+            if (Array.isArray(val)) {
+              if (isLast || nextIsIndex) {
+                nextNodes.push(val);
+              } else {
+                nextNodes.push(...val);
+              }
+            } else {
+              nextNodes.push(val);
+            }
+          }
+        } else if (segment.type === "index") {
+          const idx = segment.index;
+          if (Array.isArray(node)) {
+            const actualIdx = idx < 0 ? node.length + idx : idx;
+            if (actualIdx >= 0 && actualIdx < node.length) {
+              nextNodes.push(node[actualIdx]);
+            }
+          }
+        }
+      }
+
+      currentNodes = nextNodes;
+    }
+
+    return currentNodes;
+  }
+
+  private resolveItemValuesFlat(
+    item: unknown,
+    path: string
+  ): unknown[] {
+    const values = this.resolveItemValues(item, path);
+    return flattenDeep(values);
+  }
+
+  private itemPathExists(item: unknown, path: string): boolean {
+    if (item === null || item === undefined || typeof item !== "object") {
       return false;
     }
 
-    const extracted = this.applyPath([source], path);
-    if (extracted.length === 0) {
-      return false;
-    }
+    const segments = Resolve.parsePath(path);
+    let currentNodes: unknown[] = [item];
 
-    return extracted.some((val) => {
-      if (val === null || val === undefined) {
+    for (let i = 0; i < segments.length; i++) {
+      const segment = segments[i]!;
+      const isLast = i === segments.length - 1;
+      const nextIsIndex = !isLast && segments[i + 1]?.type === "index";
+      const nextNodes: unknown[] = [];
+      let matchedInSegment = false;
+
+      for (const node of currentNodes) {
+        if (node === null || node === undefined || typeof node !== "object") {
+          continue;
+        }
+
+        if (segment.type === "property") {
+          const key = segment.key;
+          if (Array.isArray(node)) {
+            for (const elem of node) {
+              if (elem !== null && elem !== undefined && typeof elem === "object" && key in elem) {
+                matchedInSegment = true;
+                const val = (elem as any)[key];
+                if (Array.isArray(val)) {
+                  if (isLast || nextIsIndex) {
+                    nextNodes.push(val);
+                  } else {
+                    nextNodes.push(...val);
+                  }
+                } else {
+                  nextNodes.push(val);
+                }
+              }
+            }
+          } else if (key in node) {
+            matchedInSegment = true;
+            const val = (node as any)[key];
+            if (Array.isArray(val)) {
+              if (isLast || nextIsIndex) {
+                nextNodes.push(val);
+              } else {
+                nextNodes.push(...val);
+              }
+            } else {
+              nextNodes.push(val);
+            }
+          }
+        } else if (segment.type === "index") {
+          const idx = segment.index;
+          if (Array.isArray(node)) {
+            const actualIdx = idx < 0 ? node.length + idx : idx;
+            if (actualIdx >= 0 && actualIdx < node.length) {
+              matchedInSegment = true;
+              nextNodes.push(node[actualIdx]);
+            }
+          }
+        }
+      }
+
+      if (!matchedInSegment && nextNodes.length === 0) {
         return false;
       }
-      return String(val).toLowerCase().includes(expected);
-    });
+
+      currentNodes = nextNodes;
+    }
+
+    return currentNodes.length > 0;
   }
 
-  /* ==========================================================
-   * PATH PARSER
-   * ======================================================== */
+  private itemPathHasValue(item: unknown, path: string): boolean {
+    if (item === null || item === undefined || typeof item !== "object") {
+      return false;
+    }
+
+    const segments = Resolve.parsePath(path);
+    let currentNodes: unknown[] = [item];
+
+    for (let i = 0; i < segments.length; i++) {
+      const segment = segments[i]!;
+      const isLast = i === segments.length - 1;
+      const nextIsIndex = !isLast && segments[i + 1]?.type === "index";
+      const nextNodes: unknown[] = [];
+
+      for (const node of currentNodes) {
+        if (node === null || node === undefined || typeof node !== "object") {
+          continue;
+        }
+
+        if (segment.type === "property") {
+          const key = segment.key;
+          if (Array.isArray(node)) {
+            for (const elem of node) {
+              if (elem !== null && elem !== undefined && typeof elem === "object" && key in elem) {
+                const val = (elem as any)[key];
+                if (val !== null && val !== undefined) {
+                  if (Array.isArray(val)) {
+                    if (isLast || nextIsIndex) {
+                      nextNodes.push(val);
+                    } else {
+                      nextNodes.push(...val);
+                    }
+                  } else {
+                    nextNodes.push(val);
+                  }
+                }
+              }
+            }
+          } else if (key in node) {
+            const val = (node as any)[key];
+            if (val !== null && val !== undefined) {
+              if (Array.isArray(val)) {
+                if (isLast || nextIsIndex) {
+                  nextNodes.push(val);
+                } else {
+                  nextNodes.push(...val);
+                }
+              } else {
+                nextNodes.push(val);
+              }
+            }
+          }
+        } else if (segment.type === "index") {
+          const idx = segment.index;
+          if (Array.isArray(node)) {
+            const actualIdx = idx < 0 ? node.length + idx : idx;
+            if (actualIdx >= 0 && actualIdx < node.length) {
+              const val = node[actualIdx];
+              if (val !== null && val !== undefined) {
+                nextNodes.push(val);
+              }
+            }
+          }
+        }
+      }
+
+      currentNodes = nextNodes;
+    }
+
+    return currentNodes.length > 0;
+  }
+
+  private isPathTraversingArray(path: string, item: unknown): boolean {
+    const segments = Resolve.parsePath(path);
+    let current: unknown = item;
+    for (let i = 0; i < segments.length; i++) {
+      const segment = segments[i]!;
+      if (segment.type === "property") {
+        if (Array.isArray(current)) {
+          return true;
+        }
+        if (current !== null && typeof current === "object" && segment.key in current) {
+          current = (current as any)[segment.key];
+        } else {
+          return false;
+        }
+      } else if (segment.type === "index") {
+        if (Array.isArray(current)) {
+          const idx = segment.index < 0 ? current.length + segment.index : segment.index;
+          current = current[idx];
+        } else {
+          return false;
+        }
+      }
+    }
+    return Array.isArray(current);
+  }
 
   private static parsePath(
     path: string
@@ -984,7 +1167,7 @@ export class Resolve<T> implements PredicateSource<T> {
       | { type: "index"; index: number }
     > = [];
 
-    const regex = /([^[.\]]+)|\[(\d+)\]/g;
+    const regex = /([^[.\]]+)|\[(-?\d+)\]/g;
     let match: RegExpExecArray | null;
 
     while ((match = regex.exec(path)) !== null) {
@@ -1006,13 +1189,16 @@ export class Resolve<T> implements PredicateSource<T> {
 }
 
 /**
- * Main public entrypoint for creating a Resolve instance.
+ * Wraps a single object or an array collection for type-safe, fluent querying.
  *
- * @param source The target object, array, or primitive data to resolve.
+ * @template T - The type of the data.
+ * @param source - A single object or an array of objects.
+ * @returns A `Resolve<T>` instance.
  *
  * @example
  * ```ts
- * const names = resolve(data).get("teams.members.name").values();
+ * resolve(users).filter("role=admin").get("name");
+ * // ["John", "Alice"]
  * ```
  */
 export function resolve<T>(source: T): Resolve<T> {

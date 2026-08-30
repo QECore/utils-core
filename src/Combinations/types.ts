@@ -166,7 +166,7 @@ export interface CombinationsFunction {
   ): CombinationCase<ResolvedCombination<T>[]>[];
 
   /**
-   * Combines independent combination outputs into one array without Cartesian multiplication.
+   * Concatenates independent combination outputs into one array without Cartesian multiplication.
    * Accepts only combination case lists.
    *
    * @param lists Combination case lists to concatenate.
@@ -175,11 +175,12 @@ export interface CombinationsFunction {
    * ```ts
    * const browsers = combinations({ browser: ["chromium", "firefox"] });
    * const envs = combinations({ env: ["local", "ci"] });
-   * const allCases = combinations.combine(browsers, envs);
+   * const allCases = combinations.concat(browsers, envs);
    * // Total 4 test cases (concatenated)
    * ```
    */
-  combine<
+  concat<
     const Lists extends readonly (readonly CombinationCase<unknown>[])[],
   >(...lists: Lists): CombinationListItem<Lists[number]>[];
+
 }
