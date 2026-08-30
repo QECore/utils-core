@@ -227,21 +227,17 @@ function generateArrayCases<T extends object>(
 }
 
 /**
- * Combines independent combination outputs into one array.
+ * Concatenates multiple combination matrices into one.
  *
- * This does not create another Cartesian product.
- *
- * @param lists Combination case lists to concatenate.
+ * @param lists - Two or more combination arrays.
+ * @returns A single combined array.
  *
  * @example
  * ```ts
- * const browsers = combinations({ browser: ["chrome", "firefox"] });
- * const environments = combinations({ env: ["local", "ci"] });
- * const allCases = combine(browsers, environments);
- * // 4 cases total
+ * concat(browserEnvMatrix, mobileMatrix);
  * ```
  */
-export function combine<
+export function concat<
   const Lists extends readonly (readonly CombinationCase<unknown>[])[],
 >(...lists: Lists): CombinationListItem<Lists[number]>[] {
   const result: CombinationListItem<Lists[number]>[] = [];
@@ -254,17 +250,20 @@ export function combine<
 }
 
 /**
- * Generates the Cartesian product of the supplied option values.
+ * Generates the Cartesian product of the given factor arrays. Each result
+ * includes a `name`, the typed `data` payload, and Playwright-style
+ * `metadata.tags` (`@factor:value`).
  *
- * @param input Object containing candidate option arrays or scalar values.
- * @param options Configuration options such as custom `nameSeparator`.
+ * @param input - An object mapping factor names to arrays of values.
+ * @param options - Optional configuration options.
+ * @returns An array of combinations.
  *
  * @example
  * ```ts
- * const cases = combinations({
- *   browser: ["chrome", "firefox"],
- *   env: ["local", "ci"],
- * });
+ * combinations({ browser: ["chromium", "firefox"], env: ["local", "ci"] });
+ * // 4 cases: [{ data: { browser: "chromium", env: "local" },
+ * //              name: "chromium - local",
+ * //              metadata: { tags: ["@browser:chromium", "@env:local"] } }, ...]
  * ```
  */
 export const combinations = Object.assign(
@@ -276,6 +275,6 @@ export const combinations = Object.assign(
   },
   {
     asArray: generateArrayCases,
-    combine,
+    concat,
   }
 ) as CombinationsFunction;
