@@ -72,7 +72,7 @@ jobs:
           const first = resolve(data.teams).first();
           const second = resolve(data.teams).at(1).first();
           const adminTeams = resolve(data.teams).filter("lead.role=admin").get("name");
-          const hasAlice: boolean = resolve(names).some((name) => name === "Alice");
+          const hasAlice: boolean = resolve(data.teams).some("members.name", (name) => name === "Alice");
           const cases = combinations({ browser: ["chrome", "firefox"] });
           const all = concat(cases, cases);
           console.log("TS smoke check passed:", names.length, first?.name, second?.name, adminTeams.length, hasAlice, all.length);
